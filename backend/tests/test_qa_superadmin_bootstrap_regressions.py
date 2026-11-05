@@ -6,12 +6,15 @@ Covers three verified issues from independent review:
 1. Duplicate "email" keys in MongoDB query - fixed with $and
 2. platform_settings qa_mode/qa_database_isolated not persisted - removed incorrect check
 3. stdin pipe password acceptance removed - only TTY getpass allowed
+
+Plus: Atlas M0/Flex compatible cluster identity verification via hello command
 """
 
 import json
 import os
 import sys
 import asyncio
+import re
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
 
 import pytest
@@ -40,11 +43,18 @@ class TestDuplicateEmailKeysFix:
             # platform_settings exists
             mock_db.platform_settings.find_one = AsyncMock(return_value={"_id": "singleton"})
 
-            # Mock client for cluster verification
+            # Mock client for cluster verification - hello command response
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            # hello command returns hosts, me, primary, setName
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": ["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
             mock_db.client = mock_client
 
             # No production domain users except qa-superadmin
@@ -72,8 +82,8 @@ class TestDuplicateEmailKeysFix:
 
             mock_db.users.count_documents = AsyncMock(side_effect=count_documents_side_effect)
 
-            # Should pass verification with approved cluster identifiers
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            # Should pass verification with approved Atlas hosts
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net"}):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is True, f"Expected True, got False: {msg}"
                 assert msg == "OK"
@@ -91,13 +101,19 @@ class TestDuplicateEmailKeysFix:
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": ["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
             mock_db.client = mock_client
 
             # Simulate finding a non-QA production user
             mock_db.users.count_documents = AsyncMock(return_value=1)
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net"}):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is False
                 assert "not isolated QA" in msg
@@ -130,11 +146,17 @@ class TestPlatformSettingsVerificationFix:
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": ["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
             mock_db.client = mock_client
 
             # Should pass verification even without qa_mode/qa_database_isolated in stored doc
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net"}):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is True, f"Expected True, got False: {msg}"
 
@@ -151,10 +173,16 @@ class TestPlatformSettingsVerificationFix:
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": ["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
             mock_db.client = mock_client
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net"}):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is False
                 assert "platform_settings singleton not found" in msg
@@ -282,95 +310,218 @@ class TestQAEnvironmentConfig:
             assert "production environment" in msg
 
 
-class TestClusterIdentityVerification:
-    """Test MongoDB cluster identity verification against pre-approved QA identifiers."""
+class TestAtlasClusterIdentityVerification:
+    """Test MongoDB Atlas-compatible cluster identity verification via hello command."""
 
-    def test_verify_cluster_identity_fails_when_qa_cluster_identifiers_not_set(self):
-        """Verify verification fails when QA_CLUSTER_IDENTIFIERS env var is not set."""
+    def _make_hello_response(self, hosts=None, me=None, primary=None, set_name="atlas-rs-0"):
+        """Helper to create a hello command response."""
+        return {
+            "hosts": hosts or ["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+            "me": me or "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+            "primary": primary or "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+            "setName": set_name,
+            "ok": 1.0
+        }
+
+    def test_verify_cluster_identity_fails_when_qa_atlas_hosts_not_set(self):
+        """Verify verification fails when QA_ATLAS_HOSTS env var is not set."""
         async def run_test():
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            # replSetGetStatus fails (not a replica set or command error)
-            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response())
 
-            # QA_CLUSTER_IDENTIFIERS not set
+            # QA_ATLAS_HOSTS not set
             with patch.dict(os.environ, {}, clear=True):
                 result, msg = await _verify_mongodb_cluster_identity(mock_client)
                 assert result is False
-                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+                assert "QA_ATLAS_HOSTS environment variable not set" in msg
 
         asyncio.run(run_test())
 
-    def test_verify_cluster_identity_fails_when_qa_cluster_identifiers_empty(self):
-        """Verify verification fails when QA_CLUSTER_IDENTIFIERS is set but empty/whitespace."""
+    def test_verify_cluster_identity_fails_when_qa_atlas_hosts_empty(self):
+        """Verify verification fails when QA_ATLAS_HOSTS is set but empty/whitespace."""
         async def run_test():
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response())
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "   "}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "   "}):
                 result, msg = await _verify_mongodb_cluster_identity(mock_client)
                 assert result is False
-                # Empty/whitespace is treated same as not set
-                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+                assert "QA_ATLAS_HOSTS is set but contains no valid host patterns" in msg
 
         asyncio.run(run_test())
 
-    def test_verify_cluster_identity_fails_when_not_replica_set(self):
-        """Verify verification fails when MongoDB is not a replica set."""
+    def test_verify_cluster_identity_fails_when_hello_command_fails(self):
+        """Verify verification fails when hello command fails (connection/permission issues)."""
         async def run_test():
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            # Both replSetGetStatus and buildInfo fail
-            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+            mock_admin_db.command = AsyncMock(side_effect=Exception("connection failed"))
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
                 result, msg = await _verify_mongodb_cluster_identity(mock_client)
                 assert result is False
-                # When both commands fail, we get the generic message
-                assert "Failed to determine MongoDB cluster identity" in msg
+                assert "hello command failed" in msg.lower()
 
         asyncio.run(run_test())
 
-    def test_verify_cluster_identity_fails_when_replica_set_name_not_approved(self):
-        """Verify verification fails when replica set name is not in approved list."""
+    def test_verify_cluster_identity_fails_when_no_hosts_in_hello_response(self):
+        """Verify verification fails when hello returns no host information."""
         async def run_test():
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            # replSetGetStatus returns a replica set name not in approved list
-            mock_admin_db.command = AsyncMock(return_value={"set": "unauthorized-rs-01"})
+            # Empty hosts array
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": [],
+                "me": "",
+                "primary": "",
+                "setName": "",
+                "ok": 1.0
+            })
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
                 result, msg = await _verify_mongodb_cluster_identity(mock_client)
                 assert result is False
-                assert "unauthorized-rs-01" in msg
-                assert "does not match any approved" in msg
+                assert "hello command returned no host information" in msg
 
         asyncio.run(run_test())
 
-    def test_verify_cluster_identity_passes_when_replica_set_name_approved(self):
-        """Verify verification passes when replica set name is in approved list."""
+    def test_verify_cluster_identity_fails_when_host_not_in_allowlist(self):
+        """Verify verification fails when connected host doesn't match approved patterns."""
         async def run_test():
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            # replSetGetStatus returns an approved replica set name
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            # Connected to unauthorized host
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response(
+                hosts=["unauthorized-cluster.mongodb.net:27017"],
+                me="unauthorized-cluster.mongodb.net:27017",
+                primary="unauthorized-cluster.mongodb.net:27017"
+            ))
 
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                assert "unauthorized-cluster.mongodb.net" in msg
+                assert "do not match approved QA Atlas hosts" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_fails_when_some_hosts_not_in_allowlist(self):
+        """Verify verification fails when ANY connected host doesn't match approved patterns."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # Mixed: one authorized, one unauthorized (e.g., shard member not in allowlist)
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": [
+                    "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                    "unauthorized-shard.mongodb.net:27017"
+                ],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
+
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                assert "unauthorized-shard.mongodb.net" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_passes_when_host_matches_exact_pattern(self):
+        """Verify verification passes when connected host matches exact approved pattern."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response(
+                hosts=["snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017"]
+            ))
+
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net"}):
                 result, msg = await _verify_mongodb_cluster_identity(mock_client)
                 assert result is True
-                assert "qa-rs-01" in msg
+                assert "verified" in msg.lower()
+                assert "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_passes_when_host_matches_wildcard_pattern(self):
+        """Verify verification passes when connected host matches wildcard approved pattern."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # All hosts must match the pattern, so override me and primary too
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": ["snar-qa-shard-00-00.6acc27266b2b9c24df70b88c.mongodb.net:27017"],
+                "me": "snar-qa-shard-00-00.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa-shard-00-00.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
+
+            # Wildcard pattern for shard members
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa-shard-*.mongodb.net"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is True
                 assert "verified" in msg.lower()
 
         asyncio.run(run_test())
 
-    def test_verify_qa_database_identity_includes_cluster_verification(self):
-        """Verify that verify_qa_database_identity now requires cluster identity verification."""
+    def test_verify_cluster_identity_passes_with_multiple_approved_patterns(self):
+        """Verify verification passes with multiple approved patterns (primary + shards)."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={
+                "hosts": [
+                    "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                    "snar-qa-shard-00-00.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                    "snar-qa-shard-00-01.6acc27266b2b9c24df70b88c.mongodb.net:27017"
+                ],
+                "me": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "primary": "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net:27017",
+                "setName": "atlas-rs-0",
+                "ok": 1.0
+            })
+
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net,snar-qa-shard-*.mongodb.net"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is True
+                assert "verified" in msg.lower()
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_case_insensitive_matching(self):
+        """Verify host matching is case-insensitive."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # hello returns lowercase, but pattern has uppercase
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response(
+                hosts=["SNAR-QA.6ACC27266B2B9C24DF70B88C.MONGODB.NET:27017"]
+            ))
+
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is True
+
+        asyncio.run(run_test())
+
+    def test_verify_qa_database_identity_includes_atlas_cluster_verification(self):
+        """Verify that verify_qa_database_identity now requires Atlas cluster identity verification."""
         async def run_test():
             mock_db = AsyncMock()
             mock_db.name = "snar_qa"
@@ -381,17 +532,18 @@ class TestClusterIdentityVerification:
             mock_client = AsyncMock()
             mock_admin_db = AsyncMock()
             mock_client.admin = mock_admin_db
-            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_admin_db.command = AsyncMock(return_value=self._make_hello_response())
             mock_db.client = mock_client
 
-            # Without QA_CLUSTER_IDENTIFIERS - should fail
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": ""}, clear=True):
+            # Without QA_ATLAS_HOSTS - should fail
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": ""}, clear=True):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is False
-                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+                # Empty string is treated as "set but no valid patterns"
+                assert "QA_ATLAS_HOSTS is set but contains no valid host patterns" in msg
 
-            # With approved QA_CLUSTER_IDENTIFIERS - should pass
-            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+            # With approved QA_ATLAS_HOSTS - should pass
+            with patch.dict(os.environ, {"QA_ATLAS_HOSTS": "snar-qa.*.mongodb.net"}):
                 result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
                 assert result is True, f"Expected True, got False: {msg}"
 

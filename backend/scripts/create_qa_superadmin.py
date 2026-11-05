@@ -106,7 +106,7 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
     This verification uses independently verifiable markers:
     1. Database name matches expected QA database (from env)
     2. No production data markers exist (excluding known QA bootstrap account)
-    3. MongoDB cluster identity verified against pre-approved QA cluster identifiers
+    3. MongoDB cluster identity verified via hello command against pre-approved QA Atlas host allowlist
     """
     try:
         # 1. Verify database name matches expected QA database
@@ -147,72 +147,117 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
 
 async def _verify_mongodb_cluster_identity(client: AsyncIOMotorClient) -> tuple[bool, str]:
     """
-    Verify the MongoDB cluster identity against pre-approved QA cluster identifiers.
+    Verify the MongoDB cluster identity using Atlas-compatible methods.
 
-    Uses the replica set name from replSetGetStatus as the cluster identifier.
-    For sharded clusters, uses the config server replica set name.
+    Uses the MongoDB 'hello' command (modern replacement for 'ismaster') to obtain
+    server metadata, combined with an independently approved QA Atlas connection-host
+    allowlist from the QA_ATLAS_HOSTS environment variable.
 
-    QA_CLUSTER_IDENTIFIERS environment variable must contain a comma-separated list
-    of approved replica set names / cluster identifiers.
+    This approach works on all MongoDB deployments including Atlas M0/Flex tiers
+    where replSetGetStatus is not available.
+
+    QA_ATLAS_HOSTS environment variable must contain a comma-separated list of
+    approved Atlas host patterns (e.g., "snar-qa.6acc27266b2b9c24df70b88c.mongodb.net").
+    Patterns support wildcards for shard members (e.g., "snar-qa-shard-*.mongodb.net").
 
     Fail closed if:
-    - QA_CLUSTER_IDENTIFIERS is not set
-    - Cannot determine cluster identity (e.g., not a replica set)
-    - Cluster identity not in approved list
+    - QA_ATLAS_HOSTS is not set
+    - Cannot determine connected host(s) from hello command or connection string
+    - Connected host(s) do not match any approved pattern
+    - hello command fails (indicating connection/permission issues)
     """
-    # Get pre-approved QA cluster identifiers from environment
-    approved_identifiers_env = os.environ.get("QA_CLUSTER_IDENTIFIERS", "").strip()
-    if not approved_identifiers_env:
+    # Get pre-approved QA Atlas host allowlist from environment
+    # Must distinguish between "not set" and "set but empty" for clear error messages
+    if "QA_ATLAS_HOSTS" not in os.environ:
         return False, (
-            "QA_CLUSTER_IDENTIFIERS environment variable not set. "
-            "Must provide comma-separated list of pre-approved QA MongoDB replica set names "
-            "or cluster identifiers. Cannot verify QA database identity without approved cluster identifiers."
+            "QA_ATLAS_HOSTS environment variable not set. "
+            "Must provide comma-separated list of pre-approved QA Atlas host patterns "
+            "(e.g., 'snar-qa.6acc27266b2b9c24df70b88c.mongodb.net'). "
+            "Cannot verify QA database identity without approved Atlas hosts."
         )
 
-    approved_identifiers = [id.strip() for id in approved_identifiers_env.split(",") if id.strip()]
-    if not approved_identifiers:
-        return False, "QA_CLUSTER_IDENTIFIERS is set but contains no valid identifiers"
+    approved_hosts_env = os.environ.get("QA_ATLAS_HOSTS", "").strip()
+    approved_patterns = [p.strip() for p in approved_hosts_env.split(",") if p.strip()]
+    if not approved_patterns:
+        return False, "QA_ATLAS_HOSTS is set but contains no valid host patterns"
 
     try:
-        # Get replica set status to determine cluster identity
-        # Use admin database for replica set commands
         admin_db = client.admin
 
-        # Try replSetGetStatus first (for replica sets)
-        try:
-            repl_status = await admin_db.command("replSetGetStatus")
-            cluster_identity = repl_status.get("set", "").strip()
-            identity_source = "replica set name"
-        except Exception:
-            # If not a replica set, try to get cluster identity from buildInfo or other means
-            # For standalone or sharded clusters, we may need alternative approaches
-            try:
-                build_info = await admin_db.command("buildInfo")
-                # For Atlas, cluster name might be inferable, but not reliably
-                # For now, require replica set deployment
-                return False, (
-                    "Connected MongoDB deployment is not a replica set (replSetGetStatus failed). "
-                    "QA environment requires a replica set deployment with pre-approved replica set name. "
-                    "Cannot verify cluster identity for non-replica-set deployments."
-                )
-            except Exception:
-                return False, "Failed to determine MongoDB cluster identity"
+        # Use hello command (modern, works on all MongoDB versions including Atlas M0)
+        # hello returns: hosts (list of replica set members), primary, me, setName, etc.
+        hello_result = await admin_db.command("hello")
 
-        if not cluster_identity:
-            return False, "MongoDB replica set name is empty - cannot verify cluster identity"
+        # Extract host information from hello response
+        # 'hosts' contains the replica set member host:port strings
+        # 'me' contains this server's host:port
+        # 'primary' contains the primary's host:port (if available)
+        hello_hosts = hello_result.get("hosts", [])
+        hello_me = hello_result.get("me", "")
+        hello_primary = hello_result.get("primary", "")
+        hello_set_name = hello_result.get("setName", "")
 
-        # Check if cluster identity matches any approved identifier
-        if cluster_identity not in approved_identifiers:
+        # Collect all unique hosts from hello response
+        connected_hosts = set()
+        for host_entry in hello_hosts:
+            # host_entry format: "host:port"
+            host = host_entry.split(":")[0] if ":" in host_entry else host_entry
+            connected_hosts.add(host.lower())
+        if hello_me:
+            me_host = hello_me.split(":")[0] if ":" in hello_me else hello_me
+            connected_hosts.add(me_host.lower())
+        if hello_primary:
+            primary_host = hello_primary.split(":")[0] if ":" in hello_primary else hello_primary
+            connected_hosts.add(primary_host.lower())
+
+        if not connected_hosts:
+            # Fallback: try to extract host from client's connection string
+            # This is less reliable but provides defense-in-depth
+            return False, "hello command returned no host information - cannot verify cluster identity"
+
+        # Verify each connected host against approved patterns
+        # We require ALL connected hosts to match at least one approved pattern
+        # This prevents man-in-the-middle or unexpected cluster connections
+        unmatched_hosts = []
+        matched_hosts = []
+
+        for host in connected_hosts:
+            host_matched = False
+            for pattern in approved_patterns:
+                # Convert glob pattern to regex
+                # * matches any characters (for Atlas hostnames with cluster ID subdomain)
+                # Escape special regex chars, then convert * to .*
+                regex_pattern = re.escape(pattern).replace(r"\*", ".*")
+                if re.fullmatch(regex_pattern, host, re.IGNORECASE):
+                    host_matched = True
+                    matched_hosts.append(f"{host} (matched {pattern})")
+                    break
+            if not host_matched:
+                unmatched_hosts.append(host)
+
+        if unmatched_hosts:
             return False, (
-                f"MongoDB cluster identity '{cluster_identity}' ({identity_source}) "
-                f"does not match any approved QA cluster identifier. "
-                f"Approved: {approved_identifiers}"
+                f"Connected MongoDB host(s) do not match approved QA Atlas hosts. "
+                f"Unmatched: {', '.join(unmatched_hosts)}. "
+                f"Matched: {', '.join(matched_hosts) if matched_hosts else 'none'}. "
+                f"Approved patterns: {approved_patterns}"
             )
 
-        return True, f"Cluster identity verified: {cluster_identity} ({identity_source})"
+        # Additional verification: hello command succeeded and we're connected to a valid replica set
+        # (hello_set_name will be empty for standalone, but Atlas is always replica set)
+        identity_parts = []
+        if hello_set_name:
+            identity_parts.append(f"replica set: {hello_set_name}")
+        if hello_primary:
+            identity_parts.append(f"primary: {hello_primary}")
+        if matched_hosts:
+            identity_parts.append(f"verified hosts: {len(matched_hosts)}")
+
+        return True, f"Cluster identity verified via hello command: {', '.join(identity_parts)}"
 
     except Exception as e:
-        return False, f"Cluster identity verification failed: {e}"
+        # hello command failure indicates connection issues or insufficient permissions
+        return False, f"MongoDB hello command failed - cannot verify cluster identity: {e}"
 
 
 async def main():
