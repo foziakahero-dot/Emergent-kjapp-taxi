@@ -8,10 +8,10 @@ jobs:
     type: testflight
     environment: preview
     params:
-      build_id: 5ffa39d2-8398-493f-b914-d5bdf4e8bd28
+      build_id: e1208e09-3501-4278-a303-6470302dc3ad
       profile: testflight-qa
       submit_beta_review: false
       changelog: |
-        SNAR Customer QA, isolated QA backend. Source afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a.
+        SNAR Customer QA, isolated QA backend. Source bd46585f55c9bd6d7a045c84105856cb488f5bb6.
         Test registration and consent, Google and Apple sign-in, maps and trip status.
         QA test data and Stripe test payments only. Physical end-to-end verification is pending.
