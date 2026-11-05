@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const gate = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'customer-build-gate.json'), 'utf8'));
 const profile = process.env.EAS_BUILD_PROFILE;
-if (profile === 'qa') {
+if (['qa', 'testflight-qa'].includes(profile)) {
   // V10 owns its source directly. Never run the legacy source rewriter here.
   const { verifyCustomerQaBuild } = require('./customer-qa-build-gate.cjs');
   verifyCustomerQaBuild({ gate }).then(() => {

@@ -5,9 +5,14 @@ const { verifyQaBackend } = require('../../scripts/phase5-qa-backend-preflight.c
 
 function verifyCustomerQaConfiguration({ gate, app, eas, dependencies, env }) {
   assertQaBackend(env.EAS_BUILD_PROFILE, env.EXPO_PUBLIC_BACKEND_URL);
-  const profile = eas.build?.qa;
-  if (env.EAS_BUILD_PROFILE !== 'qa' || gate.qaBackendBuildAuthorized !== true
-      || profile?.distribution !== 'internal' || profile?.android?.buildType !== 'apk'
+  const name = env.EAS_BUILD_PROFILE;
+  const profile = eas.build?.[name];
+  const distributionValid = name === 'qa'
+    ? profile?.distribution === 'internal' && profile?.android?.buildType === 'apk'
+    : name === 'testflight-qa' && profile?.distribution === 'store'
+      && profile?.ios?.simulator !== true && app.ios?.usesAppleSignIn === true;
+  if (!distributionValid || gate.qaBackendBuildAuthorized !== true
+      || profile?.environment !== 'preview' || profile?.channel !== 'qa'
       || profile?.env?.EXPO_PUBLIC_BACKEND_URL !== APPROVED_QA_BACKEND
       || app.android?.package !== 'no.kjapp.app'
       || app.ios?.bundleIdentifier !== 'no.nexorahub.kjapp.customer'
