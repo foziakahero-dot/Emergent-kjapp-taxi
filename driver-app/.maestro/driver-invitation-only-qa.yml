@@ -8,6 +8,12 @@ tags:
     clearState: true
 - extendedWaitUntil:
     visible:
+      id: driver-onboarding-login
+    timeout: 30000
+- tapOn:
+    id: driver-onboarding-login
+- extendedWaitUntil:
+    visible:
       id: driver-login-identifier
     timeout: 30000
 - assertVisible:
@@ -19,3 +25,4 @@ tags:
 - assertNotVisible: Fortsett med Apple
 - assertNotVisible: Opprett konto
 - takeScreenshot: driver-invitation-only
+
