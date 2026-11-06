@@ -1,4 +1,4 @@
-"""New fares use zero commission while historical settlement keeps its snapshot."""
+"""New fares use 12% service fee (service_fee_12_percent) while historical settlement keeps its snapshot."""
 import asyncio
 import io
 from types import SimpleNamespace
@@ -21,7 +21,7 @@ class BookingCollection:
     def find(self, *args, **kwargs): return AsyncCursor(self.raw.find(*args, **kwargs))
 
 
-def test_real_booking_handler_snapshots_subscription_not_stored_percentage(monkeypatch):
+def test_real_booking_handler_snapshots_service_fee_12_percent(monkeypatch):
     db, uid = Database(), ObjectId()
     db.raw.users.insert_one({"_id": uid})
     db.raw.platform_settings.insert_one({"_id": "singleton", "default_commission": .12})
@@ -37,9 +37,9 @@ def test_real_booking_handler_snapshots_subscription_not_stored_percentage(monke
     body = server.TripRequest(pickup_address="Oslo", pickup_lat=59.91, pickup_lng=10.75,
         dropoff_address="Majorstuen", dropoff_lat=59.93, dropoff_lng=10.71, vehicle_type="ai-first")
     result = asyncio.run(server.request_trip(body, {"id": str(uid), "legal_accepted": True}))
-    assert result["commission_rate"] == 0
-    assert result["commission_source"] == "subscription_v1"
-    assert result["business_model"] == "subscription"
+    assert result["commission_rate"] == 0.12
+    assert result["commission_source"] == "platform_default_v2"
+    assert result["business_model"] == "service_fee_12_percent"
     assert result["payment_flow"] == "reservation"
     assert db.raw.platform_settings.find_one()["default_commission"] == .12
 

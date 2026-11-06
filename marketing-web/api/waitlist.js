@@ -28,6 +28,9 @@ export default async function handler(req, res) {
   const city = typeof fields.city === 'string' ? fields.city.trim() : '';
   const role = String(fields.role || '');
   const website = typeof fields.website === 'string' ? fields.website.trim() : '';
+  // Founding 500 campaign fields
+  const device = typeof fields.device === 'string' ? fields.device.trim().toLowerCase() : '';
+  const district = typeof fields.district === 'string' ? fields.district.trim() : '';
 
   if (
     name.length < 2 || name.length > 100 ||
@@ -35,7 +38,8 @@ export default async function handler(req, res) {
     city.length < 2 || city.length > 100 ||
     !ALLOWED_ROLES.has(role) ||
     website.length > 200 ||
-    (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))
+    (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) ||
+    (device && !['ios', 'android'].includes(device))
   ) {
     return send(res, 400, { error: 'Kontroller feltene og prøv igjen.' });
   }
@@ -61,7 +65,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'X-KJAPP-Source': 'kjappapp.no',
       },
-      body: JSON.stringify({ name, phone, email, city, role, website }),
+      body: JSON.stringify({ name, phone, email, city, role, website, device, district }),
       signal: controller.signal,
     });
 

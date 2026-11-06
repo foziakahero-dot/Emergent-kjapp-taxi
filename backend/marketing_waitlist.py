@@ -16,6 +16,18 @@ WAITLIST_GLOBAL_LIMIT_PER_MINUTE = 120
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _PHONE_RE = re.compile(r"^[+\d ()-]{8,30}$")
 
+# Device types for Founding 500 campaign
+WAITLIST_DEVICES = ("ios", "android")
+
+# Oslo districts for campaign targeting
+OSLO_DISTRICTS = (
+    "Sentrum", "Gamle Oslo", "Grünerløkka", "Sagene", "St. Hanshaugen",
+    "Frogner", "Ullern", "Vestre Aker", "Nordre Aker", "Bjerke", "Grorud",
+    "Stovner", "Alna", "Østensjø", "Nordstrand", "Søndre Nordstrand",
+    # Legacy/alternative names
+    "Majorstuen", "Bislett", "Storo", "Sinsen", "Tøyen", "Grønland",
+)
+
 
 class MarketingWaitlistRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
@@ -23,6 +35,9 @@ class MarketingWaitlistRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     city: str = Field(min_length=2, max_length=100)
     role: Literal["passenger", "driver", "fleet_owner"]
+    # Founding 500 campaign fields
+    device: Optional[Literal["ios", "android"]] = None
+    district: Optional[str] = None
     # Honeypot. Real UI leaves this blank.
     website: Optional[str] = Field(default="", max_length=200)
 
@@ -102,6 +117,19 @@ def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, a
         if len(name) < 2 or len(city) < 2:
             raise HTTPException(status_code=400, detail="Kontroller feltene og prøv igjen.")
 
+        # Validate device if provided (for Founding 500 campaign)
+        device = body.device
+        if device is not None and device not in WAITLIST_DEVICES:
+            raise HTTPException(status_code=400, detail="Ugyldig enhetstype. Velg iOS eller Android.")
+
+        # Validate district if provided (for Founding 500 campaign)
+        district = body.district
+        if district is not None:
+            district = district.strip()
+            if district and district not in OSLO_DISTRICTS:
+                # Allow unknown districts but log for review - don't reject
+                pass
+
         identity_key = waitlist_identity(
             role=body.role,
             phone=phone,
@@ -122,12 +150,18 @@ def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, a
             "created_at": now,
         }
 
+        # Add campaign fields if provided (for Founding 500)
+        if device is not None:
+            document["device"] = device
+        if district is not None and district:
+            document["district"] = district
+
         try:
             await db.beta_waitlist.update_one(
                 {"identity_key": identity_key},
                 {
                     "$setOnInsert": document,
-                    "$set": {"last_seen_at": now},
+                    "$set": {"last_seen_at": now, "device": device, "district": district},
                     "$inc": {"submission_count": 1},
                 },
                 upsert=True,
@@ -138,7 +172,7 @@ def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, a
             await db.beta_waitlist.update_one(
                 {"identity_key": identity_key},
                 {
-                    "$set": {"last_seen_at": now},
+                    "$set": {"last_seen_at": now, "device": device, "district": district},
                     "$inc": {"submission_count": 1},
                 },
             )
