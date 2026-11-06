@@ -42,13 +42,14 @@ from customer_otp import install_customer_otp
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from integration_settings import IntegrationSettings, install_integration_settings
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
+from beta_campaign import install_beta_campaign, ensure_beta_campaign_indexes, get_campaign_discount, apply_campaign_discount_to_settlement
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
-from service_fee_policy import subscription_trip_terms, saved_trip_rate
+from service_fee_policy import subscription_trip_terms, saved_trip_rate, PLATFORM_DEFAULT_COMMISSION
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -1476,6 +1477,7 @@ async def lifespan(app: FastAPI):
     await db.revoked_tokens.create_index("jti", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
     await ensure_marketing_waitlist_indexes(db)
+    await ensure_beta_campaign_indexes(db)
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
@@ -7693,6 +7695,101 @@ async def admin_update_commission(fleet_id: str, body: CommissionUpdateRequest, 
     return {"ok": True}
 
 
+class PlatformCommissionUpdateRequest(BaseModel):
+    commission_rate: float
+    reason: Optional[str] = None
+
+
+@api.get("/admin/platform/commission")
+async def get_platform_commission_config(current=Depends(require_superadmin)):
+    """Get current platform commission configuration (Super Admin only)."""
+    from service_fee_policy import get_platform_commission_config
+    config = await get_platform_commission_config(db)
+    return config
+
+
+@api.post("/admin/platform/commission")
+async def set_platform_commission_rate(body: PlatformCommissionUpdateRequest, current=Depends(require_superadmin)):
+    """Set the platform default commission rate (Super Admin only)."""
+    from service_fee_policy import set_platform_commission_rate, MAX_COMMISSION_RATE
+    if not 0.0 <= body.commission_rate <= MAX_COMMISSION_RATE:
+        raise HTTPException(400, f"Kommisjon må være mellom 0% og {int(MAX_COMMISSION_RATE * 100)}%")
+    new_config = await set_platform_commission_rate(db, body.commission_rate, current)
+    await _audit(current, "platform.commission_change", "platform", "default",
+                 {"commission_rate": new_config.get("previous_rate", PLATFORM_DEFAULT_COMMISSION)},
+                 {"commission_rate": body.commission_rate}, body.reason)
+    return {"ok": True, "config": new_config}
+
+
+class ServiceAreaConfigRequest(BaseModel):
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    radius_km: Optional[float] = None
+    enforce: Optional[bool] = None
+    pickup_only: Optional[bool] = None
+    reason: Optional[str] = None
+
+
+@api.get("/admin/platform/service-area")
+async def get_service_area_config(current=Depends(require_superadmin)):
+    """Get current service area configuration (Super Admin only)."""
+    return {
+        "center": {"lat": OSLO_BETA_CENTER_LAT, "lng": OSLO_BETA_CENTER_LNG},
+        "radius_km": OSLO_BETA_RADIUS_KM,
+        "enforced": OSLO_BETA_ENFORCE,
+        "pickup_only": True,
+        "launch_city": "Oslo",
+        "coverage": "Oslo/Akershus",
+    }
+
+
+@api.post("/admin/platform/service-area")
+async def update_service_area_config(body: ServiceAreaConfigRequest, current=Depends(require_superadmin)):
+    """Update service area configuration (Super Admin only)."""
+    global OSLO_BETA_CENTER_LAT, OSLO_BETA_CENTER_LNG, OSLO_BETA_RADIUS_KM, OSLO_BETA_ENFORCE
+
+    changes = {}
+    if body.center_lat is not None:
+        if not -90 <= body.center_lat <= 90:
+            raise HTTPException(400, "center_lat må være mellom -90 og 90")
+        changes["center_lat"] = (OSLO_BETA_CENTER_LAT, body.center_lat)
+        OSLO_BETA_CENTER_LAT = body.center_lat
+        os.environ["KJAPP_SERVICE_AREA_CENTER_LAT"] = str(body.center_lat)
+    if body.center_lng is not None:
+        if not -180 <= body.center_lng <= 180:
+            raise HTTPException(400, "center_lng må være mellom -180 og 180")
+        changes["center_lng"] = (OSLO_BETA_CENTER_LNG, body.center_lng)
+        OSLO_BETA_CENTER_LNG = body.center_lng
+        os.environ["KJAPP_SERVICE_AREA_CENTER_LNG"] = str(body.center_lng)
+    if body.radius_km is not None:
+        if not 0 < body.radius_km <= 200:
+            raise HTTPException(400, "radius_km må være mellom 0 og 200")
+        changes["radius_km"] = (OSLO_BETA_RADIUS_KM, body.radius_km)
+        OSLO_BETA_RADIUS_KM = body.radius_km
+        os.environ["KJAPP_SERVICE_AREA_RADIUS_KM"] = str(body.radius_km)
+    if body.enforce is not None:
+        changes["enforced"] = (OSLO_BETA_ENFORCE, body.enforce)
+        OSLO_BETA_ENFORCE = body.enforce
+        os.environ["KJAPP_SERVICE_AREA_ENFORCE"] = "true" if body.enforce else "false"
+
+    # Build before/after for audit
+    before = {}
+    after = {}
+    for key, (old_val, new_val) in changes.items():
+        before[key] = old_val
+        after[key] = new_val
+
+    await _audit(current, "platform.service_area_change", "platform", "service_area", before, after, body.reason)
+    return {"ok": True, "config": {
+        "center": {"lat": OSLO_BETA_CENTER_LAT, "lng": OSLO_BETA_CENTER_LNG},
+        "radius_km": OSLO_BETA_RADIUS_KM,
+        "enforced": OSLO_BETA_ENFORCE,
+        "pickup_only": True,
+        "launch_city": "Oslo",
+        "coverage": "Oslo/Akershus",
+    }}
+
+
 @api.get("/admin/audit-log")
 async def admin_audit_log(entity_type: Optional[str] = None, page: int = 1, page_size: int = 100, current=Depends(require_admin)):
     q = {}
@@ -11922,6 +12019,8 @@ async def _queue_beta_confirmation(identity, email, name):
 
 install_marketing_waitlist(api, db, confirmation=_queue_beta_confirmation, require_admin=require_admin, audit=_audit)
 
+install_beta_campaign(api, db, require_admin=require_admin, audit=_audit)
+
 
 def _apply_integration_settings(values):
     global STRIPE_WEBHOOK_SECRET, MAPTILER_API_KEY, FCM_APP, FCM_INIT_TRIED, AI_LLM_KEY
@@ -11962,9 +12061,13 @@ async def _reservation_destination(trip):
     return await stripe_destination_for_trip(db, stripe, trip)
 
 
+async def _campaign_discount_checker(customer_id: str, trip_id: str, price_kr: int, commission_rate: float) -> int:
+    return await get_campaign_discount(db, customer_id, trip_id, price_kr, commission_rate)
+
 ride_reservations = RideReservations(
     db, stripe, mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts,
     push=send_push_to_user, dispatch=offer_trip_to_next_driver, destination=_reservation_destination,
+    campaign_discount=_campaign_discount_checker,
 )
 
 ride_search = RideSearch(db, real_filter=_real_trip_filter, offer=offer_trip_to_next_driver,

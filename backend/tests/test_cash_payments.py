@@ -72,7 +72,7 @@ def test_actual_cash_booking_needs_no_card_and_dispatches_unpaid(context, monkey
     dispatch, reserve = booking_setup(monkeypatch)
     result = asyncio.run(server.request_trip(body('cash'), {'id': uid, 'legal_accepted': True}))
     assert result['status'] == 'searching' and result['payment_status'] == 'cash_due'
-    assert result['payment_method'] == 'cash' and result['commission_rate'] == 0
+    assert result['payment_method'] == 'cash' and result['commission_rate'] == 0.12
     assert result['settlement_model'] == 'driver_collected_cash'
     dispatch.assert_awaited_once()
     reserve.authorize.assert_not_awaited()
