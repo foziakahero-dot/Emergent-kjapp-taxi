@@ -1,0 +1,17 @@
+name: SNAR Customer QA APK Maestro entry
+# Manual validation of the existing signed QA APK. No build or account changes.
+on:
+  workflow_dispatch: {}
+jobs:
+  customer_entry:
+    name: Verify Customer startup and registration entry on Android emulator
+    type: maestro
+    environment: preview
+    runs_on: linux-medium-nested-virtualization
+    params:
+      build_id: e3e0f65e-ee0a-470c-8466-3473708a7147
+      flow_path: .maestro/customer-entry-qa.yml
+      retries: 0
+      shards: 1
+      record_screen: false
+      output_format: junit

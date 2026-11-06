@@ -1,0 +1,17 @@
+name: SNAR Customer QA TestFlight upload only
+# Upload the verified QA IPA only; no recompilation or App Store release.
+on:
+  workflow_dispatch: {}
+jobs:
+  upload_verified_qa_ipa:
+    name: Upload Customer QA build to TestFlight
+    type: testflight
+    environment: preview
+    params:
+      build_id: e1208e09-3501-4278-a303-6470302dc3ad
+      profile: testflight-qa
+      submit_beta_review: false
+      changelog: |
+        SNAR Customer QA, isolated QA backend. Source bd46585f55c9bd6d7a045c84105856cb488f5bb6.
+        Test registration and consent, Google and Apple sign-in, maps and trip status.
+        QA test data and Stripe test payments only. Physical end-to-end verification is pending.
