@@ -24,6 +24,14 @@ Customer Maestro observed fresh startup, the permissions screen, a second fresh 
 
 TestFlight upload/processing is distinct from tester-group access, installation and physical Apple/Google sign-in. Those remain unverified. Superadmin exists, but private password reset/2FA and successful panel access remain unverified. Full authenticated registration, dispatch, trip and Stripe TEST payment remain pending.
 
+## QA Superadmin recovery preparation, 6 November
+
+A new private login attempt with the confirmed QA account still returned Feil innlogging. No password was visible to the agent and no retry loop was performed. Source inspection confirms that QA Admin uses the same-origin /api/auth/login route; the QA forgot-password endpoint intentionally does not issue a reset email. An existing password hash cannot be converted back to a verified plaintext password.
+
+backend/scripts/recover_qa_superadmin.py is prepared, **not applied**. Its default invocation only verifies eligibility. The --apply mode requires operator-controlled TTY password entry and confirmation; getpass echo fallback, pipes, files, argv and environment password inputs are refused. Rejected CLI arguments are not echoed. The utility reuses the existing QA environment and live Atlas/database-identity checks, requires canonical snar_qa and exactly one qa-superadmin@snarapp.no in approved, enabled, must-reset, not-yet-2FA-enrolled bootstrap state, and refuses other accounts or established 2FA enrollment. It rotates the password atomically and invalidates previous sessions without changing roles, permissions, approval or 2FA state. The operator's confirmed new permanent password completes the password-reset requirement; private 2FA enrollment remains mandatory for Admin access.
+
+44 local recovery/bootstrap regression tests passed with the repository's bcrypt 4.2.1, motor 3.6.0, pymongo 4.9.2 and pytest 9.1.1 versions. No live recovery, production deployment, new account or credential file was performed. Render console sign-in and operator handoff are required before any recovery can be applied.
+
 ## Validation workflow scope
 
 Both validation workflows are manual custom jobs. Neither starts a build, account, booking, payment or submission.
