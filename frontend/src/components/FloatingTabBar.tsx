@@ -1,4 +1,5 @@
 import { Dock } from './snar10/Dock';
+import { CustomerDock } from './CustomerDock';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type RefObject } from 'react';
 import { View } from 'react-native';
 import { BlurTargetView } from 'expo-blur';
@@ -38,9 +39,10 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
   const visible = state.routes.filter(route => (driver
     ? ['home', 'earnings', 'intel', 'messages', 'profile']
     : ['home', 'history', 'profile']).includes(route.name));
-  const customerIcons: Record<string, string> = { home: 'home', history: 'activity', assist: 'ai', messages: 'message', profile: 'profile' };
+  const customerIcons: Record<string, string> = { home: 'home', history: 'calendar', assist: 'ai', messages: 'message', profile: 'profile' };
   const driverIcons: Record<string, string> = { home: 'navigation', earnings: 'earnings', intel: 'ai', messages: 'message', profile: 'profile' };
-  return <Dock target={targets[focused.key]} active={focused.name} items={visible.map(route => {
+  const NavigationDock = driver ? Dock : CustomerDock;
+  return <NavigationDock target={targets[focused.key]} active={focused.name} items={visible.map(route => {
     const options = descriptors[route.key].options;
     return { id: route.name, label: typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title || route.name,
       icon: (driver ? driverIcons : customerIcons)[route.name] || 'profile', ai: route.name === (driver ? 'intel' : 'assist'),

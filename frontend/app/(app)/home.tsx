@@ -29,6 +29,7 @@ import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
+import { useBookingPaymentChoice } from '@/src/lib/usePaymentPreference';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 export default function Home() {
@@ -91,7 +92,10 @@ export default function Home() {
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
-  const [paymentChoice, setPaymentChoice] = useState<'card' | 'cash'>('card');
+  const bookingPayment = useBookingPaymentChoice(user?.id);
+  const paymentChoice = bookingPayment.choice;
+  const setPaymentChoice = bookingPayment.select;
+  useEffect(() => { if (activeTrip?.trip_id) bookingPayment.reset(); }, [activeTrip?.trip_id]);
   const { data: paymentConfig } = useQuery({ queryKey: ['payment-config', user?.id], queryFn: paymentApi.nativeConfig, enabled: !!user?.id });
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
@@ -229,7 +233,7 @@ export default function Home() {
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
-  const payMethod = cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
+  const payMethod = !bookingPayment.ready ? null : cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
   const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
 
   const openVoice = () => {
@@ -362,7 +366,7 @@ export default function Home() {
           setPaymentChoice('card'); loadMethods(); setBookingStage('vehicles');
         }}
         busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError || (paymentChoice === 'cash' && paymentConfig && paymentConfig.cash_enabled !== true ? 'Foretrukket kontantbetaling er ikke tilgjengelig nå. Velg en annen betalingsmåte før bestilling.' : '')} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
@@ -371,7 +375,7 @@ export default function Home() {
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
-        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); }}
+        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); bookingPayment.reset(); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
         onMinimize={() => { Keyboard.dismiss(); setMapOnly(true); }}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}
