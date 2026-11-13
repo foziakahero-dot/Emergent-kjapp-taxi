@@ -1,0 +1,51 @@
+appId: no.kjapp.app
+name: QA Customer startup and registration entry
+tags:
+  - qa
+  - entry
+# Credential-free validation; no registration, OAuth authorization or booking.
+---
+- runFlow: customer-startup.yml
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: onboarding-login
+    timeout: 30000
+- tapOn:
+    id: onboarding-login
+- extendedWaitUntil:
+    visible:
+      id: login-google
+    timeout: 30000
+- takeScreenshot: customer-login-google
+- scrollUntilVisible:
+    element:
+      id: login-to-register
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: login-to-register
+- assertVisible:
+    id: register-name
+- assertVisible:
+    id: register-email
+- assertVisible:
+    id: register-password
+- scrollUntilVisible:
+    element:
+      id: register-submit
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: register-submit
+- assertVisible: Fyll inn navn, e-post og passord.*
+- assertVisible:
+    id: register-legal-consent
+- scrollUntilVisible:
+    element:
+      id: register-google
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: Fortsett med Apple
+- takeScreenshot: customer-registration-entry

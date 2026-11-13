@@ -1,0 +1,17 @@
+name: SNAR Driver QA APK Maestro entry
+# Manual validation of the existing signed QA APK. No mobile build or account changes.
+on:
+  workflow_dispatch: {}
+jobs:
+  driver_invitation_entry:
+    name: Verify Driver invitation-only entry on Android emulator
+    type: maestro
+    environment: preview
+    runs_on: linux-medium-nested-virtualization
+    params:
+      build_id: 7d946fc9-55f1-4352-b41a-c9487e4daf9e
+      flow_path: .maestro/driver-invitation-only-qa.yml
+      retries: 0
+      shards: 1
+      record_screen: false
+      output_format: junit

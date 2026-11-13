@@ -33,7 +33,7 @@ module.exports = ({ config: base }) => {
   }]);
 
   const googleServicesFile = isQaBuild
-    ? (process.env.QA_GOOGLE_SERVICES_JSON || '').trim()
+    ? (process.env.QA_GOOGLE_SERVICES_JSON_V2 || process.env.QA_GOOGLE_SERVICES_JSON || '').trim()
     : (
       process.env.GOOGLE_SERVICES_JSON ||
       process.env.GOOGLE_SERVICES_FILE ||

@@ -1,0 +1,28 @@
+appId: no.kjapp.driver
+name: QA Driver invitation-only entry
+tags:
+  - qa
+  - authentication
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: driver-onboarding-login
+    timeout: 30000
+- tapOn:
+    id: driver-onboarding-login
+- extendedWaitUntil:
+    visible:
+      id: driver-login-identifier
+    timeout: 30000
+- assertVisible:
+    id: driver-login-password
+- assertVisible:
+    id: driver-login-submit
+- assertVisible: 'Ny sjåfør.*invitasjonen fra løyvehaveren.*'
+- assertNotVisible: Fortsett med Google
+- assertNotVisible: Fortsett med Apple
+- assertNotVisible: Opprett konto
+- takeScreenshot: driver-invitation-only
+

@@ -1,4 +1,4 @@
-import { startQuoteRefresh } from '@/src/lib/quoteRefresh';
+import { startQuoteRefresh, quoteTermsKey, QUOTE_MAX_AGE_MS } from '@/src/lib/quoteRefresh';
 import { SheetFrame, SheetHandle } from '@/src/components/snar10/Sheet';
 import { Chip } from '@/src/components/snar10/Chip';
 import { BlurTargetView } from 'expo-blur';
@@ -29,6 +29,7 @@ import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
+import { useBookingPaymentChoice } from '@/src/lib/usePaymentPreference';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 export default function Home() {
@@ -91,7 +92,10 @@ export default function Home() {
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
-  const [paymentChoice, setPaymentChoice] = useState<'card' | 'cash'>('card');
+  const bookingPayment = useBookingPaymentChoice(user?.id);
+  const paymentChoice = bookingPayment.choice;
+  const setPaymentChoice = bookingPayment.select;
+  useEffect(() => { if (activeTrip?.trip_id) bookingPayment.reset(); }, [activeTrip?.trip_id]);
   const { data: paymentConfig } = useQuery({ queryKey: ['payment-config', user?.id], queryFn: paymentApi.nativeConfig, enabled: !!user?.id });
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
@@ -227,9 +231,19 @@ export default function Home() {
   }
   const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const selectedTerms = quoteTermsKey(estimate, selType);
+  const previousTerms = useRef({ vehicle: selType, key: selectedTerms });
+  useEffect(() => {
+    const previous = previousTerms.current;
+    previousTerms.current = { vehicle: selType, key: selectedTerms };
+    if (bookingLock.current || previous.vehicle !== selType || previous.key === null || selectedTerms === null || previous.key === selectedTerms) return;
+    setReviewing(false);
+    setBookingStage('vehicles');
+    setError('Tilbudet er oppdatert. Kontroller prisen og bekreft turen på nytt.');
+  }, [selType, selectedTerms]);
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
-  const payMethod = cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
+  const payMethod = !bookingPayment.ready ? null : cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
   const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
 
   const openVoice = () => {
@@ -244,7 +258,7 @@ export default function Home() {
         setError('Velg hentested manuelt, eller del posisjonen din før du bestiller.');
       return;
     }
-    if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= 45000 || !estimate || priceFor(selType) == null) {
+    if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= QUOTE_MAX_AGE_MS || !estimate || selectedTerms === null) {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
       return;
     }
@@ -296,6 +310,7 @@ export default function Home() {
         }
       } catch {}
       if (e?.response?.data?.detail?.code === 'quote_changed') {
+        setReviewing(false); setBookingStage('vehicles');
         setQuote(null);
         setError('Prisen er endret. Kontroller det nye tilbudet og bekreft på nytt.');
         const fresh = await tripsApi.estimate({
@@ -354,7 +369,7 @@ export default function Home() {
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
-        destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
+        destination={dropoff} estimate={estimate} quotedAt={quotedAt} quoteFresh={quoteFresh} vehicle={selType} price={selectedPrice}
         nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         onWalletSaved={async card => {
           const selected = await paymentApi.setDefault(card.id);
@@ -362,7 +377,7 @@ export default function Home() {
           setPaymentChoice('card'); loadMethods(); setBookingStage('vehicles');
         }}
         busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError || (paymentChoice === 'cash' && paymentConfig && paymentConfig.cash_enabled !== true ? 'Foretrukket kontantbetaling er ikke tilgjengelig nå. Velg en annen betalingsmåte før bestilling.' : '')} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
@@ -371,7 +386,7 @@ export default function Home() {
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
-        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); }}
+        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); bookingPayment.reset(); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
         onMinimize={() => { Keyboard.dismiss(); setMapOnly(true); }}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}
