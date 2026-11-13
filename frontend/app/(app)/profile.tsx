@@ -8,11 +8,13 @@ import { useAuth } from '@/src/context/AuthContext';
 import { mePlacesApi, paymentApi } from '@/src/lib/api';
 import { CustomerPhoto } from '@/src/components/CustomerPhoto';
 import { Text } from '@/src/components/Typography';
+import { usePaymentPreference } from '@/src/lib/usePaymentPreference';
 import { V10Group, V10Row, V10Screen, V10Section, v10 } from '@/src/components/V10UI';
 
 export default function Profile() {
   const router = useRouter();
   const { user } = useAuth();
+  const preference = usePaymentPreference(user?.id);
   const places = useQuery({ queryKey: ['me-places', user?.id], queryFn: mePlacesApi.list, enabled: !!user?.id });
   const methods = useQuery({ queryKey: ['payment-methods', user?.id], queryFn: paymentApi.list, enabled: !!user?.id });
   const records = Array.isArray(places.data?.places) ? places.data.places : [];
@@ -29,7 +31,7 @@ export default function Profile() {
       return <V10Row key={label} border={index > 0} icon={icon} title={label} subtitle={places.isPending ? 'Henter sted…' : places.isError ? 'Kunne ikke hente stedet' : place?.name || 'Legg til adresse'} onPress={() => router.push(`/saved-places?label=${encodeURIComponent(label)}` as any)} testID={`profile-place-${label === 'Hjem' ? 'home' : 'work'}`} />;
     })}</V10Group></V10Section>
     <V10Section title="Konto"><V10Group>
-      <V10Row icon="payment" title="Betaling" subtitle={methods.isPending ? 'Henter betalingsmåter…' : methods.isError ? 'Åpne for å hente betalingsmåter' : primary ? paymentLabel(primary) : 'Legg til betalingsmåte'} onPress={() => router.push('/payment-methods')} testID="profile-payments" />
+      <V10Row icon={preference.choice === 'cash' ? 'cash' : 'payment'} title="Betaling" subtitle={preference.choice === 'cash' ? 'Kontant · foretrukket betalingsmåte' : methods.isPending ? 'Henter betalingsmåter…' : methods.isError ? 'Åpne for å hente betalingsmåter' : primary ? paymentLabel(primary) : 'Kort eller kontant · velg betalingsmåte'} onPress={() => router.push('/payment-methods')} testID="profile-payments" />
       <V10Row border icon="access" title="Tilgjengelighet" onPress={() => router.push('/customer-accessibility')} testID="profile-accessibility" />
       <V10Row border icon="settings" title="Innstillinger" onPress={() => router.push('/settings')} testID="profile-settings" />
       <V10Row border icon="help" title="Support" onPress={() => router.push('/support')} testID="profile-help" />
