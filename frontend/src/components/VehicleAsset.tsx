@@ -10,6 +10,8 @@ const bookingRenders = {
   'ai-first': require('../../assets/vehicles/customer-20261111/snar.png'),
   enkelt: require('../../assets/vehicles/customer-20261111/snar.png'),
   premium: require('../../assets/vehicles/customer-20261111/premium.png'),
+  suv: require('../../assets/vehicles/customer-20261111/suv.png'),
+  trygg: require('../../assets/vehicles/customer-20261111/xl.png'),
 } as const;
 
 export function VehicleAsset({

@@ -11,7 +11,7 @@ const noop = () => {};
 const host = name => ({children, ...props}) => React.createElement(name, props, children);
 const components = new Proxy({}, {get: (_, name) => host(String(name))});
 const colors = new Proxy({}, {get: () => '#123456'});
-class Value { setValue() {} interpolate() { return 0; } }
+class Value { stopAnimation(){}  setValue() {} interpolate() { return 0; } }
 const native = {View:host('View'),Text:host('Text'),Pressable:host('Pressable'),ScrollView:host('ScrollView'),Image:host('Image'),
   StyleSheet:{create:x=>x,absoluteFill:{},hairlineWidth:1},Platform:{OS:'android'},Animated:{Value,View:host('AnimatedView')},Easing:{bezier:noop}};
 const common = {'react':React,'react/jsx-runtime':req('react/jsx-runtime'),'react-native':native,
@@ -92,5 +92,35 @@ test('cash completion prompts receipt before showing the earnings summary',async
   assert.ok(byId(tree,'driver-summary-screen'));
   assert.ok(byId(tree,'driver-summary-continue'));
   assert.match(text(tree),/Kontantbetaling bekreftet/);
+  await renderer.act(async()=>tree.unmount());
+});
+
+
+test('all four vehicle rows use their own server price; missing XL cannot borrow another fare',async()=>{
+  let tree,chosen;const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');
+  const options=[{vehicle_type:'ai-first',price:173},{vehicle_type:'premium',price:265},{vehicle_type:'suv',price:219},{vehicle_type:'trygg',price:309}];
+  const props={...booking,stage:'vehicles',quoteFresh:true,estimate:{options},onVehicle:x=>chosen=x};
+  await renderer.act(async()=>{tree=renderer.create(React.createElement(CustomerBookingView,props));});
+  assert.equal(byId(tree,'vehicle-trygg').props.disabled,false);
+  assert.match(byId(tree,'vehicle-trygg').props.accessibilityLabel,/309 kr/);
+  assert.match(byId(tree,'vehicle-suv').props.accessibilityLabel,/219 kr/);
+  await renderer.act(async()=>byId(tree,'vehicle-trygg').props.onPress());assert.equal(chosen,'trygg');
+  await renderer.act(async()=>tree.update(React.createElement(CustomerBookingView,{...props,estimate:{options:options.slice(0,3)}})));
+  assert.equal(byId(tree,'vehicle-trygg').props.disabled,true);
+  assert.match(byId(tree,'vehicle-trygg').props.accessibilityLabel,/Ikke tilgjengelig/);
+  assert.doesNotMatch(byId(tree,'vehicle-trygg').props.accessibilityLabel,/173|219|309/);
+  await renderer.act(async()=>tree.unmount());
+});
+test('automatic refresh updates displayed server fares and stale prices cannot be selected',async()=>{
+  let tree,chosen;const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');
+  const props={...booking,stage:'vehicles',quoteFresh:true,onVehicle:x=>chosen=x};
+  const render=(price,fresh)=>React.createElement(CustomerBookingView,{...props,quoteFresh:fresh,estimate:{options:[{vehicle_type:'suv',price}]}});
+  await renderer.act(async()=>{tree=renderer.create(render(219,true));});
+  await renderer.act(async()=>tree.update(render(227,true)));
+  assert.match(byId(tree,'vehicle-suv').props.accessibilityLabel,/227 kr/);
+  await renderer.act(async()=>tree.update(render(227,false)));
+  assert.equal(byId(tree,'vehicle-suv').props.disabled,true);
+  await renderer.act(async()=>byId(tree,'vehicle-suv').props.onPress());assert.equal(chosen,undefined);
+  assert.match(text(tree),/Oppdaterer prisene/);
   await renderer.act(async()=>tree.unmount());
 });
