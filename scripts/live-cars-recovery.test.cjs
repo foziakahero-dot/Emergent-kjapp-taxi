@@ -108,6 +108,25 @@ function Harness({ vehicleType }) { current = useAvailableCars({ enabled: true, 
   await act(async () => resolveRest(snapshot([car('rest-old')])));
   assert.equal(current.cars[0].id, 'socket-current', 'Late recovery response cannot overwrite the resumed authoritative socket');
   await act(async () => tree.unmount()); assert.equal(timers.size, 0);
+  // An authoritative zero-car response is a healthy empty result, even when
+  // REST is recovering a failed socket. It must never be labelled offline.
+  http = () => Promise.resolve(snapshot([]));
+  await act(async () => { tree = renderer.create(React.createElement(Harness)); });
+  await act(async () => socket.events.connect_error());
+  assert.equal(current.issue, 'empty'); assert.equal(current.phase, 'waiting');
+  assert.equal(current.cars.length, 0);
+  await advance(2000);
+  assert.equal(current.issue, 'empty');
+  await act(async () => socket.events['cars:snapshot']({ ...snapshot([]), subscription_id: socket.subscription.subscription_id }));
+  assert.equal(current.issue, 'empty');
+  await act(async () => socket.events['cars:snapshot']({ ...snapshot([]), error: 'unavailable', subscription_id: socket.subscription.subscription_id }));
+  // A REST recovery response can immediately restore the healthy empty state.
+  assert.equal(current.issue, 'empty');
+  http = () => Promise.reject(new Error('Network unavailable'));
+  await advance(12_000);
+  assert.equal(current.issue, 'offline', 'Failed network recovery must not masquerade as zero supply');
+  await act(async () => tree.unmount()); assert.equal(timers.size, 0);
+
   const { useAssignedVehicle } = load('useAssignedVehicle.ts');
   let assigned;
   function Assigned({ trip }) { assigned = useAssignedVehicle(trip); return null; }
