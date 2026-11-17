@@ -1,3 +1,4 @@
+import { useTranslation } from '@/src/lib/customerLanguage';
 import React from 'react';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { confirmedPaymentMethod, paymentLabel } from '@/src/components/BookingPrimitives';
@@ -12,6 +13,7 @@ import { usePaymentPreference } from '@/src/lib/usePaymentPreference';
 import { V10Group, V10Row, V10Screen, V10Section, v10 } from '@/src/components/V10UI';
 
 export default function Profile() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const preference = usePaymentPreference(user?.id);
@@ -26,17 +28,17 @@ export default function Profile() {
       <CustomerPhoto initials={initials} size={72} shape="v10" showLabel={false} />
       <View style={{ flex: 1 }}><Text style={v10.title}>{user?.fullName || 'SNAR-bruker'}</Text><Text style={v10.secondary}>{[user?.phone, user?.email].filter(Boolean).join(' · ')}</Text></View>
     </View>
-    <V10Section title="Steder"><V10Group>{[['Hjem', 'home'], ['Jobb', 'work']].map(([label, icon], index) => {
+    <V10Section title={t("Steder")}><V10Group>{[[t("Hjem"), 'home'], [t("Jobb"), 'work']].map(([label, icon], index) => {
       const place = records.find((item: any) => item.label === label);
-      return <V10Row key={label} border={index > 0} icon={icon} title={label} subtitle={places.isPending ? 'Henter sted…' : places.isError ? 'Kunne ikke hente stedet' : place?.name || 'Legg til adresse'} onPress={() => router.push(`/saved-places?label=${encodeURIComponent(label)}` as any)} testID={`profile-place-${label === 'Hjem' ? 'home' : 'work'}`} />;
+      return <V10Row key={label} border={index > 0} icon={icon} title={t(label)} subtitle={places.isPending ? t("Henter sted…") : places.isError ? t("Kunne ikke hente stedet") : place?.name || t("Legg til adresse")} onPress={() => router.push(`/saved-places?label=${encodeURIComponent(label)}` as any)} testID={`profile-place-${label === t("Hjem") ? 'home' : 'work'}`} />;
     })}</V10Group></V10Section>
-    <V10Section title="Konto"><V10Group>
-      <V10Row icon={preference.choice === 'cash' ? 'cash' : 'payment'} title="Betaling" subtitle={preference.choice === 'cash' ? 'Kontant · foretrukket betalingsmåte' : methods.isPending ? 'Henter betalingsmåter…' : methods.isError ? 'Åpne for å hente betalingsmåter' : primary ? paymentLabel(primary) : 'Kort eller kontant · velg betalingsmåte'} onPress={() => router.push('/payment-methods')} testID="profile-payments" />
-      <V10Row border icon="access" title="Tilgjengelighet" onPress={() => router.push('/customer-accessibility')} testID="profile-accessibility" />
-      <V10Row border icon="settings" title="Innstillinger" onPress={() => router.push('/settings')} testID="profile-settings" />
-      <V10Row border icon="help" title="Support" onPress={() => router.push('/support')} testID="profile-help" />
-      <V10Row border icon="message" title="Meldinger" onPress={() => router.push('/(app)/messages')} testID="profile-messages" />
-      <V10Row border icon="ai" title="AI-hjelp" onPress={() => router.push('/(app)/assist')} testID="profile-ai-help" />
+    <V10Section title={t("Konto")}><V10Group>
+      <V10Row icon={preference.choice === 'cash' ? 'cash' : 'payment'} title={t("Betaling")} subtitle={preference.choice === 'cash' ? t("Kontant · foretrukket betalingsmåte") : methods.isPending ? t("Henter betalingsmåter…") : methods.isError ? t("Åpne for å hente betalingsmåter") : primary ? paymentLabel(primary) : t("Kort eller kontant · velg betalingsmåte")} onPress={() => router.push('/payment-methods')} testID="profile-payments" />
+      <V10Row border icon="access" title={t("Tilgjengelighet")} onPress={() => router.push('/customer-accessibility')} testID="profile-accessibility" />
+      <V10Row border icon="settings" title={t("Innstillinger")} onPress={() => router.push('/settings')} testID="profile-settings" />
+      <V10Row border icon="help" title={t("Support")} onPress={() => router.push('/support')} testID="profile-help" />
+      <V10Row border icon="message" title={t("Meldinger")} onPress={() => router.push('/(app)/messages')} testID="profile-messages" />
+      <V10Row border icon="ai" title={t("AI-hjelp")} onPress={() => router.push('/(app)/assist')} testID="profile-ai-help" />
     </V10Group></V10Section>
   </V10Entrance></V10Screen>;
 }
