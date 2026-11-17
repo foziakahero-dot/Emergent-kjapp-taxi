@@ -30,6 +30,7 @@ const P: Record<string, React.ReactNode> = {
   chevD: <><Path d="m6 10 6 6 6-6"/></>,
   chevU: <><Path d="m6 14 6-6 6 6"/></>,
   check: <><Path d="m5 12.5 4.5 4.5L19 7.5"/></>,
+  minus: <><Path d="M5 12h14"/></>,
   plus: <><Path d="M12 5v14M5 12h14"/></>,
   bell: <><Path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><Path d="M10 20.5h4"/></>,
   settings: <><Circle cx="12" cy="12" r="2.8"/><Path d="M12 3.5v2.3M12 18.2v2.3M20.5 12h-2.3M5.8 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/></>,
