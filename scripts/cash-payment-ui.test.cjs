@@ -48,6 +48,31 @@ test('customer availability explains automatic updates and actual nearby supply'
   await renderer.act(async()=>tree.unmount());
 });
 
+test('empty availability keeps searching without an error or retry; network and GPS failures remain actionable',async()=>{
+  const {AvailabilityStatus}=load('frontend/src/components/AvailabilityStatus.tsx');
+  for (const compact of [true,false]) {
+    let tree,retries=0;
+    const search={cars:[],phase:'waiting',issue:'empty',now:0,retry:()=>retries++};
+    const render=state=>React.createElement(AvailabilityStatus,{compact,search:{...search,...state}});
+    await renderer.act(async()=>{tree=renderer.create(render({}));});
+    assert.match(text(tree),/Søker etter ledige biler i nærheten/);
+    assert.match(text(tree),/Ingen ledige biler akkurat nå. Vi oppdaterer automatisk/);
+    assert.doesNotMatch(text(tree),/Kan ikke|Får ikke|Prøv igjen/);
+    assert.equal(byId(tree,'availability-retry'),undefined);
+    await renderer.act(async()=>tree.update(render({phase:'loading',issue:null})));
+    assert.match(text(tree),/Søker etter ledige biler i nærheten/);
+    await renderer.act(async()=>tree.update(render({issue:'offline',phase:'exhausted'})));
+    assert.match(text(tree),/Kan ikke oppdatere|Får ikke oppdatert/);
+    assert.equal(byId(tree,'availability-auto-update'),undefined);
+    await renderer.act(async()=>byId(tree,'availability-retry').props.onPress());
+    assert.equal(retries,1);
+    await renderer.act(async()=>tree.update(render({issue:'location',phase:'exhausted'})));
+    assert.match(text(tree),/Aktiver posisjon/);
+    assert.equal(byId(tree,'availability-auto-update'),undefined);
+    await renderer.act(async()=>tree.unmount());
+  }
+});
+
 test('cash can be selected without a card and is hidden when disabled',async()=>{
   const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');let tree,chosen;
   await renderer.act(async()=>{tree=renderer.create(React.createElement(CustomerBookingView,{...booking,payment:null,onPaymentChoice:x=>chosen=x}));});
