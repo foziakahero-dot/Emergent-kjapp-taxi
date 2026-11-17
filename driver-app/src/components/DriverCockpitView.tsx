@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ring } from './snar10/Ring';
 import { TurnBanner } from './snar10/driver/TurnBanner';
-import { OnlineChip } from './snar10/driver/OnlineChip';
+import { DriverOnlineHeader, DriverWaitingCard, DRIVER_DOCK_HEIGHT, driverDockBottom } from './DriverHomeChrome';
 import { OfferSheet } from './snar10/driver/OfferSheet';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -30,10 +30,10 @@ type Props = {
   onCancel: () => void; onNoShow: () => void; onCall: () => void; onChat: () => void; onNavigate: () => void;
   onEmergency: () => void; onMinimize: (value: boolean) => void; onContinue: () => void; onPause: () => void;
   onError: (error: unknown) => void; onCashReceived?: () => void;
+  onHeaderHeight?: (height: number) => void; onWaitingHeight?: (height: number) => void;
 };
 const known = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 const breakdownAmount = (value: unknown) => known(value) && (value as number) >= 0 ? (value as number).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Avventer';
-const minutes = (value: unknown) => known(value) ? `${Math.floor((value as number) / 60)} t ${(value as number) % 60} min` : '—';
 function ShiftStatusRing() {
   const reduced = useReducedMotion();
   const turn = useRef(new Animated.Value(0)).current;
@@ -67,6 +67,7 @@ export function DriverCockpitView(p: Props) {
   ];
   const [phase, setPhase] = useState<'base' | 'arrival' | 'start' | 'arriving' | 'complete'>('base');
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(150);
   const [clock, setClock] = useState(Date.now());
   useEffect(() => { setPhase('base'); }, [p.current?.trip_id, p.current?.status]);
   useEffect(() => { if (p.current?.status !== 'at_pickup') return; const timer = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, [p.current?.status]);
@@ -84,9 +85,9 @@ export function DriverCockpitView(p: Props) {
     <View style={{ flex: 1 }}><V10Action kind="soft" small height={52} iconSize={20} label="Melding" icon="message" onPress={p.onChat} /></View>
     {pickupNavigation ? <View style={{ flex: 1 }}><V10Action kind="soft" small height={52} iconSize={20} label="Naviger" icon="navigation" onPress={p.onNavigate} testID="driver-pickup-navigation" /></View> : null}
   </View>;
-  const header = <V10Entrance key={p.online ? 'online' : 'offline'} style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: p.online ? 16 : 20, right: p.online ? 16 : 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-    {p.online ? <OnlineChip target={p.mapTarget} onlineTime={minutes(p.summary?.online_minutes)} income={kr(p.summary?.income)} disabled={p.busy || !!trip}
-      onEarnings={() => router.navigate('/(driver)/earnings')} onOffline={p.onOnline} /> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
+  const header = <V10Entrance onLayout={event => { setHeaderHeight(event.nativeEvent.layout.height); p.onHeaderHeight?.(event.nativeEvent.layout.height); }} key={p.online ? 'online' : 'offline'} style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: p.online ? 16 : 20, right: p.online ? 16 : 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+    {p.online ? <View style={{ flex: 1 }}><DriverOnlineHeader summary={p.summary} ready={p.connected && p.gpsReady} busy={p.busy || !!trip}
+      target={p.mapTarget} onEarnings={() => router.navigate('/(driver)/earnings')} onOffline={p.onOnline} /></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
     {!p.online ? <Pressable accessibilityRole="button" accessibilityLabel="Innstillinger" onPress={() => router.push('/driver-settings')} style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="settings" /></Pressable> : null}
   </V10Entrance>;
   if (p.busy && !trip && !p.offer && !p.completed) return <V10Entrance fade testID="driver-shift-pending" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -133,8 +134,8 @@ export function DriverCockpitView(p: Props) {
   }
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
     {!trip && !(p.offer && p.online) ? header : null}
-    {p.error ? <View style={{ position: 'absolute', top: insets.top + (trip ? 124 : 76), left: 16, right: 16, padding: 10, borderRadius: 12, backgroundColor: colors.dangerSoft, zIndex: 55 }}><Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 12, lineHeight: 16 }}>{p.error}</Text></View> : null}
-    {trip && p.minimized ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(108, insets.bottom + 74) }}><Pressable accessibilityRole="button" accessibilityLabel="Åpne aktiv tur" onPress={() => p.onMinimize(false)} testID="driver-trip-reopen" style={{ minHeight: 60, borderRadius: 20, padding: 14, backgroundColor: colors.surfaceInverse }}><Text style={[v10.body, { color: colors.onInverse }]}>{trip.status === 'in_trip' ? 'Tur pågår' : trip.status === 'at_pickup' ? 'Venter på passasjer' : 'På vei til henting'}</Text><Text style={[v10.caption, { color: colors.onInverse }]}>{name} · {trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address}</Text></Pressable></View> : trip ? <>
+    {p.error ? <View style={{ position: 'absolute', top: trip ? insets.top + 124 : Math.max(58, insets.top + 10) + headerHeight + 8, left: 16, right: 16, padding: 10, borderRadius: 12, backgroundColor: colors.dangerSoft, zIndex: 55 }}><Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 12, lineHeight: 16 }}>{p.error}</Text></View> : null}
+    {trip && p.minimized ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: driverDockBottom(insets.bottom) + DRIVER_DOCK_HEIGHT + 12 }}><Pressable accessibilityRole="button" accessibilityLabel="Åpne aktiv tur" onPress={() => p.onMinimize(false)} testID="driver-trip-reopen" style={{ minHeight: 60, borderRadius: 20, padding: 14, backgroundColor: colors.surfaceInverse }}><Text style={[v10.body, { color: colors.onInverse }]}>{trip.status === 'in_trip' ? 'Tur pågår' : trip.status === 'at_pickup' ? 'Venter på passasjer' : 'På vei til henting'}</Text><Text style={[v10.caption, { color: colors.onInverse }]}>{name} · {trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address}</Text></Pressable></View> : trip ? <>
       {!hasTurnBanner ? <Pressable accessibilityRole="button" accessibilityLabel="Minimer tur" testID="driver-trip-minimize" onPress={() => p.onMinimize(true)} style={{ position: 'absolute', right: 16, top: insets.top + 12, width: 48, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.surface, zIndex: 40 }}><V10Icon name="chevD" size={18} /></Pressable> : null}
       {hasTurnBanner ? <TurnBanner dist={pickupNavigation ? eta !== null ? `${eta} min` : 'Kjør til henting' : 'Til destinasjon'} street={trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address} style={{ top: Math.max(56, insets.top + 8) }}>
         <View style={{ gap: 4 }}>
@@ -159,10 +160,9 @@ export function DriverCockpitView(p: Props) {
         </> : null}
       </Sheet>
     </> : p.offer && p.online ? <OfferSheet offer={p.offer} offerRemaining={p.offerRemaining} offerExpired={p.offerExpired}
-      offerDistance={p.offerDistance} offerDuration={p.offerDuration} extras={p.extras} busy={p.busy} onAccept={p.onAccept} onDecline={p.onDecline} /> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}>
-      <V10Entrance><View testID="driver-online-status" accessibilityLiveRegion="polite" style={{ borderRadius: 20, padding: 16, gap: 6, backgroundColor: colors.surface, boxShadow: colors.elevation2 }}><Text style={[v10.heading, { color: p.connected && p.gpsReady ? colors.success : colors.warning }]}>{p.connected && p.gpsReady ? 'Du er online' : 'Bekrefter forbindelsen…'}</Text><Text style={v10.caption}>{p.connected && p.gpsReady ? 'Klar for nye turforespørsler.' : 'Venter på oppdatert forbindelse og posisjon. Turforespørsler kan være utilgjengelige.'}</Text></View></V10Entrance>
-      <V10Entrance delay={60} style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></V10Entrance>
-    </View> : <Sheet padBottom={108}>
+      offerDistance={p.offerDistance} offerDuration={p.offerDuration} extras={p.extras} busy={p.busy} onAccept={p.onAccept} onDecline={p.onDecline} /> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: driverDockBottom(insets.bottom) + DRIVER_DOCK_HEIGHT + 12 }}>
+      <DriverWaitingCard connected={p.connected} gpsReady={p.gpsReady} plate={p.user?.plate} target={p.mapTarget} onHeight={p.onWaitingHeight} />
+    </View> : <Sheet padBottom={driverDockBottom(insets.bottom) + DRIVER_DOCK_HEIGHT + 12}>
       <Text style={v10.overline}>SNAR DRIVER</Text><Text style={[v10.title, { marginTop: 6 }]}>Du er offline</Text>
       <Text style={[v10.secondary, { marginTop: 6, marginBottom: 18 }]}>Du mottar ingen turforespørsler. Gå online når du er klar.</Text>
       <V10Action height={58} icon="power" label="Gå online" onPress={p.onOnline} busy={p.busy} testID="driver-go-online" />

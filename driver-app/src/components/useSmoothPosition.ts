@@ -1,66 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
+import { useReducedMotion } from './Motion';
 
 type LL = { lat: number; lng: number; heading?: number } | null | undefined;
 type Pos = { lat: number; lng: number; heading: number };
+const headingKnown = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+const wrap = (n: number) => ((n % 360) + 360) % 360;
 
-function bearing(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const toDeg = (r: number) => (r * 180) / Math.PI;
-  const dLon = toRad(b.lng - a.lng);
-  const y = Math.sin(dLon) * Math.cos(toRad(b.lat));
-  const x =
-    Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) -
-    Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(dLon);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+function bearing(a: Pos, b: NonNullable<LL>) {
+  const rad = Math.PI / 180;
+  const dLon = (b.lng - a.lng) * rad;
+  return wrap(Math.atan2(Math.sin(dLon) * Math.cos(b.lat * rad),
+    Math.cos(a.lat * rad) * Math.sin(b.lat * rad) - Math.sin(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos(dLon)) / rad);
 }
 
-/**
- * Tweens a marker position toward the latest polled coordinate so the car glides
- * smoothly instead of teleporting on every poll. Also derives a heading from the
- * travel direction when the source doesn't provide one.
- */
-export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
-  const [pos, setPos] = useState<Pos | null>(
-    target ? { lat: target.lat, lng: target.lng, heading: target.heading || 0 } : null,
-  );
-  const posRef = useRef<Pos | null>(pos);
-  posRef.current = pos;
-  const raf = useRef<any>(null);
-
+/** GPS-driven motion only. North is 0°, turns take the shortest arc, and reduced motion snaps. */
+export function useSmoothPosition(target: LL, duration = 900): Pos | null {
+  const reduced = useReducedMotion();
+  const [pos, setPos] = useState<Pos | null>(target ? { lat: target.lat, lng: target.lng, heading: headingKnown(target.heading) ? wrap(target.heading) : 0 } : null);
+  const latest = useRef(pos);
+  const frame = useRef<number | null>(null);
   useEffect(() => {
-    if (!target) {
-      setPos(null);
-      return;
-    }
-    const from = posRef.current;
-    if (!from) {
-      setPos({ lat: target.lat, lng: target.lng, heading: target.heading || 0 });
-      return;
-    }
-    if (Math.abs(from.lat - target.lat) < 1e-7 && Math.abs(from.lng - target.lng) < 1e-7) {
-      return;
-    }
-    const head =
-      target.heading != null && target.heading !== 0
-        ? target.heading
-        : bearing(from, target);
-    const start = Date.now();
-    const startPos = { ...from };
+    const commit = (next: Pos | null) => { latest.current = next; setPos(next); };
+    if (!target) { commit(null); return; }
+    const from = latest.current;
+    const moved = from && (Math.abs(from.lat - target.lat) >= 1e-7 || Math.abs(from.lng - target.lng) >= 1e-7);
+    const heading = headingKnown(target.heading) ? wrap(target.heading) : from ? moved ? bearing(from, target) : from.heading : 0;
+    const to = { lat: target.lat, lng: target.lng, heading };
+    if (!from || reduced || duration <= 0) { commit(to); return; }
+    const turn = ((heading - from.heading + 540) % 360) - 180;
+    if (!moved && Math.abs(turn) < .01) return;
+    const started = Date.now();
     const step = () => {
-      const t = Math.min(1, (Date.now() - start) / duration);
-      const e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
-      setPos({
-        lat: startPos.lat + (target.lat - startPos.lat) * e,
-        lng: startPos.lng + (target.lng - startPos.lng) * e,
-        heading: head,
-      });
-      if (t < 1) raf.current = requestAnimationFrame(step);
+      const t = Math.min(1, (Date.now() - started) / duration);
+      const ease = t * (2 - t);
+      commit({ lat: from.lat + (to.lat - from.lat) * ease, lng: from.lng + (to.lng - from.lng) * ease, heading: wrap(from.heading + turn * ease) });
+      if (t < 1) frame.current = requestAnimationFrame(step);
     };
-    cancelAnimationFrame(raf.current);
-    raf.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.lat, target?.lng, duration]);
-
-  return pos;
+    frame.current = requestAnimationFrame(step);
+    return () => { if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; };
+  }, [target?.lat, target?.lng, target?.heading, duration, reduced]);
+  // A removed GPS fix must never leave a stale car visible for another frame.
+  return target ? pos : null;
 }
