@@ -1,3 +1,4 @@
+import { useTranslation } from '@/src/lib/customerLanguage';
 import { Dock } from './snar10/Dock';
 import { CustomerDock } from './CustomerDock';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type RefObject } from 'react';
@@ -33,6 +34,7 @@ export function useHideTabBar(hidden: boolean) {
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
   useColorTheme();
+  const { t } = useTranslation();
   const { hidden, targets } = useContext(Visibility);
   const focused = state.routes[state.index];
   if (hidden && (!driver || focused.name === 'home')) return null;
@@ -44,7 +46,7 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
   const NavigationDock = driver ? Dock : CustomerDock;
   return <NavigationDock target={targets[focused.key]} active={focused.name} items={visible.map(route => {
     const options = descriptors[route.key].options;
-    return { id: route.name, label: typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title || route.name,
+    return { id: route.name, label: t(typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title || route.name),
       icon: (driver ? driverIcons : customerIcons)[route.name] || 'profile', ai: route.name === (driver ? 'intel' : 'assist'),
       accessibilityLabel: options.tabBarAccessibilityLabel, testID: `tab-${route.name}` };
   })} onSelect={name => {

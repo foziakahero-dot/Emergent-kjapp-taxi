@@ -136,6 +136,9 @@ export default function RootLayout() {
               <Stack.Screen name="customer-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="customer-account" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="customer-accessibility" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-data" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-notifications" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-trip-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="support" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="support-chat" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
