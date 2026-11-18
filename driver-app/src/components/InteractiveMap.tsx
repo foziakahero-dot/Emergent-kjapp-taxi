@@ -1,10 +1,10 @@
+import { DriverMapControls } from './DriverMapControls';
 import type { DemandCell } from '@/src/lib/demand';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { Image, PanResponder, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
-import { Icon } from './Icon';
 import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
@@ -89,6 +89,8 @@ export function InteractiveMap({
   user,
   style,
   testID,
+  controlsTop = 116,
+  overlayBottom = 170,
   interactive = true,
 }: {
   pickup?: LL | null;
@@ -100,6 +102,8 @@ export function InteractiveMap({
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  controlsTop?: number;
+  overlayBottom?: number;
   interactive?: boolean;
   navigationFollow?: boolean;
 }) {
@@ -320,43 +324,14 @@ export function InteractiveMap({
             ) : null}
           </Svg>
 
-          <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
+          <Text style={{ position: 'absolute', bottom: overlayBottom + 8, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
             {ATTRIB}
           </Text>
 
-          {interactive ? (
-            <View style={{ position: 'absolute', right: 14, top: Platform.OS === 'web' ? 108 : 116, gap: 8 }} pointerEvents="box-none">
-              <Ctrl name="plus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }} testID="map-zoom-in" />
-              <Ctrl name="minus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }} testID="map-zoom-out" />
-              <Ctrl name="crosshair" onPress={recenter} testID="map-recenter" />
-            </View>
-          ) : null}
+          {interactive ? <DriverMapControls top={controlsTop} onZoomIn={() => { setManual(true); setZoom(z => clampZoom(z + 1)); }} onZoomOut={() => { setManual(true); setZoom(z => clampZoom(z - 1)); }} onRecenter={recenter} /> : null}
         </>
       ) : null}
     </View>
-  );
-}
-
-function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
-  useColorTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      testID={testID}
-      hitSlop={8}
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.line,
-      }}
-    >
-      <Icon name={name} size={20} color={colors.text} />
-    </Pressable>
   );
 }
 

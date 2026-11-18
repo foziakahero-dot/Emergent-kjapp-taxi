@@ -33,3 +33,35 @@ test('failed refresh invalidates quote and retries; a hung refresh expires the o
 test('refresh never replaces a quote while a booking is being submitted',async()=>{
   let resolve;const h=setup(()=>new Promise(r=>resolve=r));h.state.blocked=true;resolve({price:999});await h.flush();assert.equal(h.quotes.length,0);h.controller.stop();
 });
+test('quick background/resume discards the old response and immediately requests a fresh quote',async()=>{
+  const pending=[];const h=setup(()=>new Promise(resolve=>pending.push(resolve)));
+  h.controller.setActive(false);h.controller.setActive(true);
+  assert.equal(pending.length,1);
+  pending[0]({price:100});await h.flush();
+  assert.equal(h.quotes.length,0);assert.equal(pending.length,2);
+  pending[1]({price:225});await h.flush();
+  assert.equal(h.quotes.at(-1).price,225);h.controller.stop();
+});
+test('old foreground failures do not overwrite a newly resumed quote state',async()=>{
+  const pending=[];const h=setup(()=>new Promise((resolve,reject)=>pending.push({resolve,reject})));
+  h.controller.setActive(false);h.controller.setActive(true);
+  pending[0].reject(Error('old request'));await h.flush();
+  assert.equal(h.errors.length,0);assert.equal(pending.length,2);
+  pending[1].resolve({price:299});await h.flush();assert.equal(h.quotes[0].price,299);h.controller.stop();
+});
+test('expired quotes become stale even if the next request is still in flight',async()=>{
+  let calls=0;const h=setup(()=>++calls===1?Promise.resolve({price:249}):new Promise(()=>{}));
+  await h.flush();await h.tick(30000);assert.equal(calls,2);assert.equal(h.state.stale,0);
+  await h.tick(15000);assert.equal(h.state.stale,1);h.controller.stop();
+});
+test('quote comparison uses selected server price and reservation terms, not rotating tokens',()=>{
+  const module={exports:{}};
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('frontend/src/lib/quoteRefresh.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{module,exports:module.exports});
+  const {quoteTermsKey:key}=module.exports;
+  const quote=(price,token='signed-1',max_fee=60)=>({pricing_version:7,options:[{vehicle_type:'suv',price,waiting_policy:{token,free_minutes:2,per_minute:4,max_fee}}]});
+  assert.equal(key(quote(247),'suv'),key(quote(247,'signed-2'),'suv'));
+  assert.notEqual(key(quote(247),'suv'),key(quote(251),'suv'));
+  assert.notEqual(key(quote(247),'suv'),key(quote(247,'signed-1',80),'suv'));
+  assert.equal(key(quote('247'),'suv'),null);assert.equal(key(quote(NaN),'suv'),null);
+  assert.equal(key(quote(247),'trygg'),null);
+});

@@ -1,3 +1,2 @@
-// Native production map: Figma Mapbox Standard: monochrome, day, flat camera, with raster fallback when no token is configured.
+// Native Driver map: readable Mapbox Standard, building detail and raster fallback.
 export { Map, InteractiveMap, default } from './MapboxMap.native';
-

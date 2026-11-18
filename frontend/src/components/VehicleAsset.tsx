@@ -4,6 +4,16 @@ import { customerVehicleArt, type CustomerVehicleArtType } from '@/src/lib/vehic
 
 type VehicleKind = CustomerVehicleArtType;
 
+// Transparent derivatives of the owner's November renders. Map markers keep their
+// separate, shared Customer/Driver assets and heading convention.
+const bookingRenders = {
+  'ai-first': require('../../assets/vehicles/customer-20261111/snar.png'),
+  enkelt: require('../../assets/vehicles/customer-20261111/snar.png'),
+  premium: require('../../assets/vehicles/customer-20261111/premium.png'),
+  suv: require('../../assets/vehicles/customer-20261111/suv.png'),
+  trygg: require('../../assets/vehicles/customer-20261111/xl.png'),
+} as const;
+
 export function VehicleAsset({
   kind,
   selected = false,
@@ -17,7 +27,8 @@ export function VehicleAsset({
 }) {
   const spec = customerVehicleArt(kind);
   if (!spec) return null;
-  const source = { uri: spec.source };
+  const source = kind in bookingRenders
+    ? bookingRenders[kind as keyof typeof bookingRenders] : { uri: spec.source };
   return (
     <Image
       source={source}

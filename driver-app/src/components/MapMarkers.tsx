@@ -1,14 +1,12 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { Animated, View } from 'react-native';
-import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, RadialGradient, Stop } from 'react-native-svg';
 import { cssEaseOut, useReducedMotion } from '@/src/components/Motion';
+import { CarShape, CAR_ACTIVE } from './CarMarker';
 
 export function MapCar({ heading = 0 }: { heading?: number }) {
-  const id = `car-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  return <Svg width={30} height={30} viewBox="0 0 30 30">
-    <Defs><RadialGradient id={id}><Stop offset="0" stopColor="#FF0000" stopOpacity={0.22} /><Stop offset="0.7" stopColor="#FF0000" stopOpacity={0} /></RadialGradient></Defs>
-    <Circle cx={15} cy={15} r={15} fill={`url(#${id})`} />
-    <G transform={`translate(6 6) scale(0.75) rotate(${heading} 12 12)`}><Path d="M12 2l7 18-7-4-7 4z" fill="#FF0000" /></G>
+  return <Svg width={46} height={46} viewBox="-3 -3 30 30" accessibilityLabel="Din bil og kjøreretning">
+    <G transform={`rotate(${heading} 12 12)`}><CarShape {...CAR_ACTIVE} /></G>
   </Svg>;
 }
 

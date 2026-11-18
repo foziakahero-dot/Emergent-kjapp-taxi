@@ -1,15 +1,15 @@
-import { startQuoteRefresh } from '@/src/lib/quoteRefresh';
+import { startQuoteRefresh, quoteTermsKey, QUOTE_MAX_AGE_MS } from '@/src/lib/quoteRefresh';
 import { SheetFrame, SheetHandle } from '@/src/components/snar10/Sheet';
 import { Chip } from '@/src/components/snar10/Chip';
 import { BlurTargetView } from 'expo-blur';
 import { useRouteReveal } from '@/src/components/useRouteReveal';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { V10Icon } from '@/src/components/V10Icon';
-import { v10 } from '@/src/components/V10UI';
+import { V10Action, v10 } from '@/src/components/V10UI';
 import { CustomerBookingView, confirmedPaymentMethod, confirmedWaitingPolicy, type BookingStage } from '@/src/components/CustomerBookingView';
 import { recentDestinations } from '@/src/lib/recentPlaces';
 import { validPosition } from '@/src/lib/carAvailability';
-import { readPickupLocation, locationIssueText } from '@/src/lib/pickupLocation';
+import { readPickupLocation, locationIssueText, type LocationIssue } from '@/src/lib/pickupLocation';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { useAssignedVehicle } from '@/src/lib/useAssignedVehicle';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
@@ -17,7 +17,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
+import { useBookingPaymentChoice } from '@/src/lib/usePaymentPreference';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 export default function Home() {
@@ -54,7 +55,9 @@ export default function Home() {
   const [selectedPickup, setSelectedPickup] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const pickupPoint = selectedPickup || loc;
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
-  const [locationHint, setLocationHint] = useState('');
+  const [locationIssue, setLocationIssue] = useState<LocationIssue | null>(null);
+  const [locationBusy, setLocationBusy] = useState(false);
+  const [locationSettingsError, setLocationSettingsError] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
@@ -91,7 +94,10 @@ export default function Home() {
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
-  const [paymentChoice, setPaymentChoice] = useState<'card' | 'cash'>('card');
+  const bookingPayment = useBookingPaymentChoice(user?.id);
+  const paymentChoice = bookingPayment.choice;
+  const setPaymentChoice = bookingPayment.select;
+  useEffect(() => { if (activeTrip?.trip_id) bookingPayment.reset(); }, [activeTrip?.trip_id]);
   const { data: paymentConfig } = useQuery({ queryKey: ['payment-config', user?.id], queryFn: paymentApi.nativeConfig, enabled: !!user?.id });
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
@@ -159,33 +165,59 @@ export default function Home() {
   );
 
   const refreshLocation = useCallback(async (requestPermission = true) => {
-    if (requestPermission && locationRequest.current) return false;
-    if (requestPermission) locationRequest.current = true;
+    if (locationRequest.current) return false;
+    if (requestPermission) {
+      locationRequest.current = true;
+      setLocationBusy(true);
+    }
     const sequence = ++locationSequence.current;
     try {
       const result = await readPickupLocation(Location, requestPermission);
       if (sequence !== locationSequence.current) return false;
       if (!result.point) {
         setLocationReady(false);
-        setLocationHint(locationIssueText[result.issue || 'unavailable']);
+        setLocationIssue(result.issue || 'unavailable');
         setPickupLabel('Velg hentested');
         return false;
       }
       const p = result.point;
       setLoc(p);
       setLocationReady(true);
-      setLocationHint('');
+      setLocationIssue(null);
+      setLocationSettingsError(false);
       setPickupLabel('Din posisjon');
       placesApi.reverse(p.lat, p.lng).then((r) => { if (sequence === locationSequence.current && r?.label) setPickupLabel(r.label); }).catch(() => {});
       return true;
     } catch {
       if (sequence !== locationSequence.current) return false;
       setLocationReady(false);
-      setLocationHint(locationIssueText.unavailable);
+      setLocationIssue('unavailable');
       setPickupLabel('Velg hentested');
       return false;
-    } finally { if (requestPermission) locationRequest.current = false; }
+    } finally {
+      if (requestPermission) {
+        locationRequest.current = false;
+        setLocationBusy(false);
+      }
+    }
   }, []);
+
+  const locationActionLabel = locationIssue === 'settings' && Platform.OS !== 'web' ? 'Åpne posisjonsinnstillinger'
+    : !locationIssue || locationIssue === 'permission' || locationIssue === 'settings' ? 'Gi tilgang til posisjon' : 'Prøv posisjon igjen';
+  const locationHint = locationSettingsError ? 'Kunne ikke åpne innstillingene. Du kan velge hentested manuelt.'
+    : locationIssue ? locationIssueText[locationIssue] : locationIssueText.permission;
+  const locate = async () => {
+    if (locationIssue === 'settings' && Platform.OS !== 'web') {
+      setLocationSettingsError(false);
+      try { await Linking.openSettings(); }
+      catch { setLocationSettingsError(true); }
+      return;
+    }
+    if (await refreshLocation()) {
+      setSelectedPickup(null);
+      setMapFocusRevision(value => value + 1);
+    }
+  };
 
   useEffect(() => {
     // Respect the manual-address choice; only an explicit location action opens the OS prompt.
@@ -227,10 +259,22 @@ export default function Home() {
   }
   const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const selectedTerms = quoteTermsKey(estimate, selType);
+  const previousTerms = useRef({ vehicle: selType, key: selectedTerms });
+  useEffect(() => {
+    const previous = previousTerms.current;
+    previousTerms.current = { vehicle: selType, key: selectedTerms };
+    if (bookingLock.current || previous.vehicle !== selType || previous.key === null || selectedTerms === null || previous.key === selectedTerms) return;
+    setReviewing(false);
+    setBookingStage('vehicles');
+    setError('Tilbudet er oppdatert. Kontroller prisen og bekreft turen på nytt.');
+  }, [selType, selectedTerms]);
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
-  const payMethod = cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
-  const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
+  const payMethod = !bookingPayment.ready ? null : cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
+  const savedPlaces = myPlaces.filter(place => normalizeSearchPlace(place));
+  const quickPlaces = [...savedPlaces, ...recentPlaces.filter(place => normalizeSearchPlace(place) &&
+    !savedPlaces.some(saved => saved.name === place.name && saved.lat === place.lat && saved.lng === place.lng))];
 
   const openVoice = () => {
     setSearchOpen(false);
@@ -244,7 +288,7 @@ export default function Home() {
         setError('Velg hentested manuelt, eller del posisjonen din før du bestiller.');
       return;
     }
-    if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= 45000 || !estimate || priceFor(selType) == null) {
+    if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= QUOTE_MAX_AGE_MS || !estimate || selectedTerms === null) {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
       return;
     }
@@ -296,6 +340,7 @@ export default function Home() {
         }
       } catch {}
       if (e?.response?.data?.detail?.code === 'quote_changed') {
+        setReviewing(false); setBookingStage('vehicles');
         setQuote(null);
         setError('Prisen er endret. Kontroller det nye tilbudet og bekreft på nytt.');
         const fresh = await tripsApi.estimate({
@@ -354,7 +399,7 @@ export default function Home() {
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
-        destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
+        destination={dropoff} estimate={estimate} quotedAt={quotedAt} quoteFresh={quoteFresh} vehicle={selType} price={selectedPrice}
         nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         onWalletSaved={async card => {
           const selected = await paymentApi.setDefault(card.id);
@@ -362,16 +407,16 @@ export default function Home() {
           setPaymentChoice('card'); loadMethods(); setBookingStage('vehicles');
         }}
         busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
-        locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError || (paymentChoice === 'cash' && paymentConfig && paymentConfig.cash_enabled !== true ? 'Foretrukket kontantbetaling er ikke tilgjengelig nå. Velg en annen betalingsmåte før bestilling.' : '')} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        locationReady={Boolean(locationReady || selectedPickup)} locationHint={locationHint} locationActionLabel={locationActionLabel} locationBusy={locationBusy} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
         onPlace={place => { const destination = normalizeSearchPlace(place); if (destination) { setQuote(null); setMapFocusRevision(value => value + 1); setDropoff(destination); } }}
-        onLocate={() => { void refreshLocation().then(confirmed => { if (confirmed) { setSelectedPickup(null); setMapFocusRevision(value => value + 1); } }); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')} onSchedule={() => router.push('/scheduled-trip')}
+        onLocate={() => void locate()} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')} onSchedule={() => router.push('/scheduled-trip')}
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
-        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); }}
+        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); bookingPayment.reset(); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
         onMinimize={() => { Keyboard.dismiss(); setMapOnly(true); }}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}
@@ -389,8 +434,11 @@ export default function Home() {
       </View> : null}
       {!activeTrip && mapOnly && !searchOpen ? <View pointerEvents="box-none" style={{ position: 'absolute', bottom: insets.bottom + 100, left: 16, right: 64 }}>
         {dropoff ? <Pressable testID="map-resume-booking" accessibilityRole="button" onPress={() => setMapOnly(false)} style={{ padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text style={v10.body}>Fortsett tur til {dropoff.name}</Text></Pressable> : null}
-        {!locationReady ? <Pressable testID="map-enable-location" accessibilityRole="button" onPress={() => void refreshLocation(true).then(confirmed => { if (confirmed) setMapFocusRevision(value => value + 1); })} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={v10.body}>Aktiver min posisjon</Text></Pressable> : null}
-        <AvailabilityStatus compact search={available} />
+        {!(locationReady || selectedPickup) ? <View style={{ padding: 12, borderRadius: 16, backgroundColor: colors.surface, gap: 8 }}>
+          <Text style={v10.secondary}>{locationHint}</Text>
+          <V10Action testID="map-enable-location" label={locationActionLabel} busy={locationBusy} small onPress={() => void locate()} />
+          <V10Action kind="ghost" label="Velg hentested manuelt" small onPress={() => { setSearchTarget('pickup'); setSearchOpen(true); }} />
+        </View> : <AvailabilityStatus compact search={available} />}
       </View> : null}
       {!activeTrip ? <SearchSheet
           visible={searchOpen}
@@ -498,11 +546,11 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
         </View>
         {quickPlaces.some((place: any) => normalizeSearchPlace(place)) ? <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingTop: 16, paddingBottom: 8 }}>
-          {quickPlaces.filter((place: any) => normalizeSearchPlace(place)).slice(0, 3).map((place: any, i: number) =>
+          {quickPlaces.filter((place: any) => normalizeSearchPlace(place)).map((place: any, i: number) =>
             <Chip key={place.id || i} testID={`search-quick-${i}`} label={place.label || place.name} onPress={() => selectPlace(place)} />)}
         </ScrollView> : null}
         <Text style={[v10.overline, { marginTop: 16, marginBottom: 4 }]}>{q.trim().length >= 2 ? 'Resultater' : 'Faste og utvalgte steder'}</Text>
-        {selectableItems.map((r: any, i: number) => <V10Entrance key={`${r.name}-${r.lat}-${r.lng}`} delay={Math.min(i, 2) * 60}>
+        {selectableItems.map((r: any, i: number) => <V10Entrance key={`${r.name}-${r.lat}-${r.lng}-${i}`} delay={Math.min(i, 2) * 60}>
           <Pressable testID={`search-result-${i}`} accessibilityRole="button" onPress={() => selectPlace(r)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 8 }}>
             <View style={v10.icon}><V10Icon name={r.saved ? 'clock' : 'destination'} size={20} /></View>
             <View style={{ flex: 1 }}><Text style={v10.body}>{r.name}</Text>{r.address || r.label ? <Text style={v10.caption}>{r.address || r.label}</Text> : null}</View>

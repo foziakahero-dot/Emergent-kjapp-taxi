@@ -468,7 +468,7 @@ const act = renderer.act;
   let cancelRequests = 0, previews = 0, cancellationMode = 'reject', shareRequests = 0, safetyMode = 'reject';
   stubs.set('@/src/lib/api', {
     messagesApi: { send: async () => { readyCalls++; return readyResult(); } },
-    tripsApi: { get: async () => serverTrip, pickupPreference: async () => { preferenceCalls++; return preferenceResult(); }, authorize: async () => { authorizationCalls++; return serverTrip; }, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
+    tripsApi: { get: async () => serverTrip, pickupPreference: async () => { preferenceCalls++; return preferenceResult(); }, authorize: async () => { authorizationCalls++; return serverTrip; }, cancelPreview: async () => { previews++; return { cancellation_fee: 0, currency: 'NOK' }; },
       cancel: async () => { cancelRequests++; if (cancellationMode === 'lost-response') serverTrip = { ...serverTrip, status: 'cancelled' }; throw new Error('Network failed'); } },
     safetyApi: { shareLink: async () => { shareRequests++; throw new Error('Network failed'); },
       log: () => safetyMode === 'never-resolve' ? new Promise(() => {}) : Promise.reject(new Error('Network failed')) },

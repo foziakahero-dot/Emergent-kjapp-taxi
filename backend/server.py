@@ -58,6 +58,7 @@ from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 import pyotp
 import qrcode
@@ -679,6 +680,33 @@ async def _apply_driver_identity_risk(
     if not user or user.get("role") != "driver" or user.get("_id") is None:
         return user
 
+    # QA app reinstalls are routine. Restore a prior verification only when a
+    # new installation was the sole reason the approved QA driver lost it.
+    if (APP_ENV == "qa" and user.get("approved") is True
+            and user.get("identity_verification_status") == "recheck_required"
+            and user.get("identity_recheck_trigger") == "new_device"
+            and _parse_iso_utc(user.get("identity_verified_at"))
+            and not user.get("identity_recheck_pending_reason")
+            and not user.get("active_trip_id")):
+        restored = await db.users.find_one_and_update(
+            {"_id": user["_id"], "role": "driver", "approved": True,
+             "identity_verification_status": "recheck_required",
+             "identity_recheck_trigger": "new_device",
+             "identity_verification_updated_at": user.get("identity_verification_updated_at"),
+             "identity_verified_at": user["identity_verified_at"],
+             "identity_recheck_pending_reason": None,
+             "active_trip_id": {"$in": [None, ""]}},
+            {"$set": {"identity_verification_status": "verified",
+                      "identity_verification_updated_at": datetime.now(timezone.utc).isoformat()},
+             "$unset": {"identity_recheck_reason": "", "identity_recheck_trigger": ""}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if restored is not None:
+            user = restored
+        else:
+            # An admin or a competing request may have changed the decision.
+            user = await db.users.find_one({"_id": user["_id"]}) or user
+
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     status = user.get("identity_verification_status") or "not_submitted"
@@ -688,7 +716,8 @@ async def _apply_driver_identity_risk(
 
     pending_reason = user.get("identity_recheck_pending_reason")
     pending_trigger = user.get("identity_recheck_pending_trigger")
-    if status == "verified" and pending_reason and not active_trip:
+    if (status == "verified" and pending_reason and not active_trip
+            and not (APP_ENV == "qa" and pending_trigger == "new_device")):
         risk_reason = pending_reason
         risk_trigger = pending_trigger or "deferred"
 
@@ -706,7 +735,7 @@ async def _apply_driver_identity_risk(
 
         clean_device_id = str(device_id or "").strip()[:128]
         previous_device_id = str(user.get("last_driver_device_id") or "").strip()
-        if clean_device_id and previous_device_id and clean_device_id != previous_device_id:
+        if APP_ENV != "qa" and clean_device_id and previous_device_id and clean_device_id != previous_device_id:
             risk_reason = "Ny appinstallasjon eller enhet registrert"
             risk_trigger = "new_device"
 

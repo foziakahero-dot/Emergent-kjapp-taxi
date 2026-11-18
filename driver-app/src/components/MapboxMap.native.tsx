@@ -1,7 +1,8 @@
+import { DriverMapControls } from './DriverMapControls';
 import type { DemandCell } from '@/src/lib/demand';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
   Camera,
   CircleLayer,
@@ -13,7 +14,6 @@ import Mapbox, {
 } from '@rnmapbox/maps';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
-import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './InteractiveMap';
 
@@ -38,6 +38,8 @@ type Props = {
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  controlsTop?: number;
+  overlayBottom?: number;
   interactive?: boolean;
   navigationFollow?: boolean;
 };
@@ -77,6 +79,8 @@ export function MapboxInteractiveMap({
   user,
   style,
   testID,
+  controlsTop = 116,
+  overlayBottom = 170,
   interactive = true,
   navigationFollow = false,
 }: Props) {
@@ -127,8 +131,8 @@ export function MapboxInteractiveMap({
     const lats = focus.map((p) => p.lat);
     const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
-    camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
-  }, [focusKey]);
+    camera.fitBounds?.(ne, sw, [controlsTop, 58, overlayBottom, 58], duration);
+  }, [focusKey, controlsTop, overlayBottom]);
 
   useEffect(() => {
     if (navigationFollow && activeCar && mapReady && !manual) {
@@ -168,6 +172,8 @@ export function MapboxInteractiveMap({
         user={user}
         style={style}
         testID={testID}
+        controlsTop={controlsTop}
+        overlayBottom={overlayBottom}
         interactive={interactive}
       />
     );
@@ -200,6 +206,8 @@ export function MapboxInteractiveMap({
         scaleBarEnabled={false}
         attributionEnabled
         logoEnabled
+        logoPosition={{ left: 10, bottom: overlayBottom + 10 }}
+        attributionPosition={{ left: 98, bottom: overlayBottom + 10 }}
         onDidFinishLoadingMap={() => setMapReady(true)}
         onCameraChanged={(state: any) => {
           if (state?.gestures?.isGestureActive) setManual(true);
@@ -220,10 +228,10 @@ export function MapboxInteractiveMap({
           id="basemap"
           existing
           config={{
-            lightPreset: theme.effective === 'dark' ? 'night' : 'day',
-            theme: 'monochrome',
-            show3dObjects: false,
-            show3dBuildings: false,
+            lightPreset: theme.effective === 'dark' ? 'dusk' : 'day',
+            theme: 'default',
+            show3dObjects: true,
+            show3dBuildings: true,
             show3dLandmarks: false,
             show3dTrees: false,
             showPlaceLabels: true,
@@ -296,37 +304,8 @@ export function MapboxInteractiveMap({
         ) : null}
       </MapView>
 
-      {interactive ? (
-        <View style={{ position: 'absolute', right: 14, top: 116, gap: 8 }} pointerEvents="box-none">
-          <Ctrl name="plus" onPress={() => void zoomBy(1)} testID="map-zoom-in" />
-          <Ctrl name="minus" onPress={() => void zoomBy(-1)} testID="map-zoom-out" />
-          <Ctrl name="crosshair" onPress={recenter} testID="map-recenter" />
-        </View>
-      ) : null}
+      {interactive ? <DriverMapControls top={controlsTop} onZoomIn={() => void zoomBy(1)} onZoomOut={() => void zoomBy(-1)} onRecenter={recenter} /> : null}
     </View>
-  );
-}
-
-function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
-  useColorTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      testID={testID}
-      hitSlop={8}
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.line,
-      }}
-    >
-      <Icon name={name} size={20} color={colors.text} />
-    </Pressable>
   );
 }
 

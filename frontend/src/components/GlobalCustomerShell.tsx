@@ -78,7 +78,9 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!visible) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      router.replace('/(app)/home'); return true;
+      if (router.canGoBack()) router.back();
+      else router.replace('/(app)/home');
+      return true;
     });
     return () => sub.remove();
   }, [visible]);

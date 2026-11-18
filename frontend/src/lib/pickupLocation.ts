@@ -1,16 +1,17 @@
 import { validPosition } from './carAvailability';
 
-export type LocationIssue = 'permission' | 'services' | 'timeout' | 'unavailable';
+export type LocationIssue = 'permission' | 'settings' | 'services' | 'timeout' | 'unavailable';
 type LocationApi = {
-  requestForegroundPermissionsAsync(): Promise<{ status: string }>;
-  getForegroundPermissionsAsync(): Promise<{ status: string }>;
+  requestForegroundPermissionsAsync(): Promise<{ status: string; canAskAgain?: boolean }>;
+  getForegroundPermissionsAsync(): Promise<{ status: string; canAskAgain?: boolean }>;
   hasServicesEnabledAsync(): Promise<boolean>;
   getCurrentPositionAsync(options: { accuracy: number }): Promise<{ coords: { latitude: number; longitude: number } }>;
   Accuracy: { High: number };
 };
 export const locationIssueText: Record<LocationIssue, string> = {
-  permission: 'Posisjonstilgang mangler. Velg hentested manuelt, eller gi tilgang til posisjon.',
-  services: 'Posisjonstjenester er slått av. Slå på GPS, eller velg hentested manuelt.',
+  permission: 'Gi posisjonstilgang for å finne hentestedet ditt og se ledige biler i nærheten.',
+  settings: 'Tillat posisjon for SNAR i innstillingene på enheten.',
+  services: 'Posisjonstjenester er slått av. Slå dem på og prøv igjen.',
   timeout: 'Det tok for lang tid å finne posisjonen. Prøv igjen, eller velg hentested manuelt.',
   unavailable: 'Kunne ikke finne posisjonen. Prøv igjen, eller velg hentested manuelt.',
 };
@@ -22,7 +23,9 @@ export async function readPickupLocation(api: LocationApi, ask: boolean, timeout
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const permission = await (ask ? api.requestForegroundPermissionsAsync() : api.getForegroundPermissionsAsync());
-    if (permission.status !== 'granted') return { point: null, issue: 'permission' };
+    if (permission.status !== 'granted') {
+      return { point: null, issue: permission.canAskAgain === false ? 'settings' : 'permission' };
+    }
     if (!(await api.hasServicesEnabledAsync())) return { point: null, issue: 'services' };
     const position = await Promise.race([
       api.getCurrentPositionAsync({ accuracy: api.Accuracy.High }),
