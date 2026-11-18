@@ -1,0 +1,4 @@
+SNAR Customer Android QA build
+Reviewed QA source: e579e558a0ed3996e55837d952da1c9ca8b900ca
+Requested by the owner on 18 November 2026.
+This marker belongs to the build trigger branch only.
