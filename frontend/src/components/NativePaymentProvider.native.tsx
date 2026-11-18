@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StripeProvider, handleURLCallback } from '@stripe/stripe-react-native';
 import { Linking } from 'react-native';
+import Constants from 'expo-constants';
 import { paymentApi } from '@/src/lib/api';
 
 export function NativePaymentProvider({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,6 @@ export function NativePaymentProvider({ children }: { children: React.ReactNode 
     }).catch(() => {}); // Payment action reports recoverable configuration/network errors.
     return () => { mounted = false; };
   }, []);
-  const merchantIdentifier = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || undefined;
+  const merchantIdentifier = Constants.expoConfig?.extra?.applePayMerchantId || undefined;
   return <StripeProvider publishableKey={publishableKey} urlScheme="kjapp" merchantIdentifier={merchantIdentifier}><>{children}</></StripeProvider>;
 }

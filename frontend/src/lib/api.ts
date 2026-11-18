@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Linking } from 'react-native';
 import { storage } from '@/src/utils/storage';
 
 export const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
@@ -54,6 +55,13 @@ async function withReservation(request: () => Promise<any>) {
   try { return (await request()).data; }
   catch (error: any) {
     const detail = error?.response?.data?.detail;
+    if (detail?.code === 'vipps_redirect_required' && typeof detail.trip_id === 'string' && typeof detail.redirect_url === 'string') {
+      const url = new URL(detail.redirect_url);
+      if (url.protocol !== 'https:' || !/(^|\.)(vipps\.no|mobilepay\.dk|vippsmobilepay\.com)$/.test(url.hostname)
+          || url.username || url.password || url.port) throw new Error('Vipps/MobilePay svarte med en ugyldig betalingslenke.');
+      await Linking.openURL(url.toString());
+      return (await api.get(`/trips/${encodeURIComponent(detail.trip_id)}`)).data;
+    }
     if (detail?.code !== 'reservation_requires_action') throw error;
     const { approveReservation } = await import('./nativeReservation');
     let approved: boolean;
@@ -163,6 +171,21 @@ export const mePlacesApi = {
 export const settingsApi = {
   get: () => api.get('/settings').then((r) => r.data),
   update: (data: any) => api.patch('/settings', data).then((r) => r.data),
+};
+
+export const travelApi = {
+  transit: (pickup: { lat: number; lng: number }, dropoff: { lat: number; lng: number }) =>
+    api.post('/travel/transit', { pickup, dropoff }, { timeout: 9000 }).then(r => r.data),
+  weather: (lat: number, lng: number) =>
+    api.get('/travel/weather', { params: { lat, lng }, timeout: 9000 }).then(r => r.data),
+  flight: (number: string, direction: 'A' | 'D', day: string) =>
+    api.get('/travel/flight', { params: { number, direction, day }, timeout: 9000 }).then(r => r.data),
+};
+
+export const businessPaymentApi = {
+  get: () => api.get('/me/business-payment').then(r => r.data),
+  save: (organisation_number: string, payment_method_id: string) =>
+    api.put('/me/business-payment', { organisation_number, payment_method_id }).then(r => r.data),
 };
 
 export const summaryApi = {

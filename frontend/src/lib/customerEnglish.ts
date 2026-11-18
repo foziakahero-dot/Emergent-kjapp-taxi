@@ -2,6 +2,11 @@
  * Trip screens and server messages retain Norwegian as their fallback.
  */
 export const customerEnglish: Record<string, string> = {
+  'Be sjåføren ringe før henting': 'Ask your driver to call before pickup',
+  'Anropsvalget ble ikke bekreftet.': 'Your call preference could not be confirmed.',
+  'Kunne ikke hente anropsvalget': 'Could not load your call preference',
+  'Sjåføren får en beskjed i appen ca. to minutter før henting når du har telefonnummer på kontoen. Gjelder nye turer.':
+    'For new rides, drivers see a reminder around two minutes before pickup when your account has a phone number.',
   'Innstillinger': 'Settings', 'Utseende': 'Appearance', 'Lyst': 'Light', 'Mørkt': 'Dark', 'Automatisk': 'System',
   'Språk': 'Language', 'Velg språk': 'Choose language',
   'Velg språk for innstillinger, konto og kundestøtte.': 'Choose the language for settings, account and support.',
