@@ -39,7 +39,7 @@ from onboarding_emails import queue_confirmation, confirmation_loop, queue_custo
 from norwegian_bank import normalize_bank_account
 import document_storage
 from receipt_delivery import receipt_delivery_loop
-from qa_panels import install_qa_panels
+from qa_panels import QA_ADMIN_APPLICATIONS_URL, QA_FLEET_URL, install_qa_panels
 from student_verification import install_student_verification, export_student_verification, erase_student_verification
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from customer_otp import install_customer_otp
@@ -2749,7 +2749,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         return {"ok": True}
     user = await db.users.find_one({"email": email})
     if user:
-        if APP_ENV == "qa":
+        if APP_ENV == "qa" and not (user.get("role") == "fleet_owner" and user.get("approved")
+                                    and not user.get("disabled") and user.get("fleet_id") and email_configured()):
             return {"ok": True}
         token = secrets.token_urlsafe(32)
         await db.password_reset_tokens.insert_one({
@@ -2765,7 +2766,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         configured_reset_base = (os.environ.get("PASSWORD_RESET_WEB_BASE") or "https://kjappapp.no").strip().rstrip("/")
         reset_web_base = configured_reset_base if configured_reset_base.startswith("https://") else "https://kjappapp.no"
         if user.get("role") == "fleet_owner":
-            reset_web_base = "https://fleet.snarapp.no"
+            reset_web_base = QA_FLEET_URL if APP_ENV == "qa" else "https://fleet.snarapp.no"
         fallback_url = f"{reset_web_base}/reset-password/{token}"
         if body.client == "customer":
             reset_url = f"kjapp://reset-password/{token}"
@@ -5842,6 +5843,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
 ADMIN_PERMISSION_PREFIXES = (
     ("/api/admin/receipts", "finance"),
     ("/api/admin/finance", "finance"),
+    ("/api/admin/bonus-", "finance"),
     ("/api/admin/transactions", "finance"),
     ("/api/admin/refunds", "finance"),
     ("/api/admin/control/payouts", "finance"),
@@ -7375,7 +7377,13 @@ async def award_driver_bonuses(driver_id: str) -> list:
                 "earned_at": datetime.now(timezone.utc).isoformat(),
                 "paid_out": False,
             }
-            await db.bonus_payouts.insert_one(dict(payout))
+            # A driver's Nth daily award can be earned only once across concurrent settlements.
+            # Existing awards without a slot are included in paid_count.
+            slot = f"{driver_id}:{c['id']}:{p['local_date']}:{p['paid_count'] + 1}"
+            try:
+                await db.bonus_payouts.insert_one({**payout, "_id": slot})
+            except DuplicateKeyError:
+                continue
             payout.pop("_id", None)
             earned.append({"name": c["name"], "amount": int(c["bonus_kr"]), "trips": p["required"]})
             await send_push_to_user(
@@ -9273,8 +9281,15 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
 
 @api.get("/pricing/surge")
 async def pricing_surge():
-    """Current surge multiplier + reason (weekend/night)."""
-    return current_surge_info()
+    """Return the global tariff; the trip estimate also applies pickup-area overrides."""
+    pricing = await active_pricing()
+    now = datetime.now(timezone.utc)
+    timed = current_surge_info(now)
+    multiplier = calculate_price(0, "ai-first", 0, pricing, when=now)["surge_multiplier"]
+    reasons = timed["reasons"] if multiplier > 1 else []
+    if multiplier > timed["multiplier"]:
+        reasons = ["Manuelt pristillegg"]
+    return {"multiplier": multiplier, "reasons": reasons, "active": multiplier > 1}
 
 
 @api.post("/driver/trip/{trip_id}/cancel")
@@ -10421,7 +10436,7 @@ def _fleet_application_decision_html(company: str, approved: bool, notes: str, t
 # ============================================================
 def _driver_invite_url(token: str) -> str:
     # Never use Origin/Referer: invitation links must open the public fleet signup route.
-    base = os.environ.get("KJAPP_FLEET_URL", "https://fleet.snarapp.no").strip().rstrip("/")
+    base = QA_FLEET_URL if APP_ENV == "qa" else os.environ.get("KJAPP_FLEET_URL", "https://fleet.snarapp.no").strip().rstrip("/")
     return f"{base}/driver-signup/{token}"
 
 
@@ -11985,6 +12000,8 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 async def _prepare_onboarding_email(job: dict) -> str:
+    if job.get("kind") == "fleet-admin" and APP_ENV == "qa":
+        return job["html"].replace("https://admin.snarapp.no/fleet-applications", QA_ADMIN_APPLICATIONS_URL)
     if job.get("kind") == "driver-approved":
         user = await db.users.find_one({"email": job["recipient"], "role": "driver", "approved": True,
                                         "disabled": {"$ne": True}})
@@ -11994,9 +12011,7 @@ async def _prepare_onboarding_email(job: dict) -> str:
         return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p>Passord: Bruk passordet du valgte ved registrering. Bruk «Glemt passord» i SNAR Driver dersom du trenger et nytt.</p>'
     if job.get("kind") != "fleet-approved":
         return job["html"]
-    public = os.getenv("FLEET_PUBLIC_URL", "" if APP_ENV == "qa" else "https://fleet.snarapp.no").rstrip("/")
-    if not public or (APP_ENV == "qa" and not is_safe_qa_web_origin(public)):
-        raise ValueError("QA Fleet web origin is not configured")
+    public = QA_FLEET_URL if APP_ENV == "qa" else (os.getenv("FLEET_PUBLIC_URL") or "https://fleet.snarapp.no").rstrip("/")
     user = await db.users.find_one({"email": job["recipient"], "role": "fleet_owner", "approved": True,
                                     "disabled": {"$ne": True}})
     if not user or not user.get("fleet_id"):

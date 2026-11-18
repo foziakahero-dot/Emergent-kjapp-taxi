@@ -24,6 +24,7 @@ export default function DriverEarnings() {
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const summary = useQuery({ queryKey: ['driver-summary', user?.id], queryFn: driverApi.summary, enabled: !!user?.id, refetchInterval: focused ? 5000 : false });
+  const bonuses = useQuery({ queryKey: ['driver-bonuses', user?.id], queryFn: driverApi.bonuses, enabled: !!user?.id && focused, refetchInterval: focused ? 30000 : false });
   const weekly = useQuery({ queryKey: ['driver-weekly', user?.id], queryFn: driverApi.weekly, enabled: !!user?.id, refetchInterval: focused ? 5000 : false });
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => { if (state === 'active' && focused) void Promise.allSettled([summary.refetch(), weekly.refetch()]); });
@@ -44,6 +45,13 @@ export default function DriverEarnings() {
         <Kpi label="Turer" value={number(data?.trips)?.toLocaleString('nb-NO') || '—'} />
         <Kpi label="Per time" value={hourly !== null ? Math.round(hourly).toLocaleString('nb-NO') : '—'} unit="kr" />
       </View>
+      {bonuses.isError ? <V10State icon="wifiOff" title="Kunne ikke hente sjåførbonuser" body="Oppdater for å se aktive kampanjer og fremdrift." action="Prøv igjen" onAction={() => void bonuses.refetch()} />
+        : !!bonuses.data?.campaigns.length && <V10Section title="Sjåførbonus">
+          {bonuses.data.campaigns.map(c => <V10Group key={c.id} style={{ padding: 16 }}>
+            <Text style={v10.body}>{c.name} · {kr(c.bonus_kr)}</Text>
+            <Text style={v10.secondary}>{c.cap_reached ? 'Dagens mål er nådd' : `${c.progress} av ${c.trips_required} turer`} · kl. {c.start_hour}–{c.end_hour}</Text>
+          </V10Group>)}
+        </V10Section>}
       <EarningsMeter income={income} goal={Number(goal)} />
       <V10Section title="Siste 7 dager"><V10Group style={{ padding: 16 }}>{weekly.isPending ? <Loader /> : weekly.isError ? <V10State icon="wifiOff" title="Grafen kunne ikke hentes" body="Oppdater inntektsdataene for å prøve igjen." action="Prøv igjen" onAction={() => void weekly.refetch()} /> : <DriverWeekChart days={Array.isArray(weekly.data?.days) ? weekly.data.days : []} />}</V10Group></V10Section>
       <Pressable accessibilityRole="button" onPress={() => router.navigate('/(driver)/intel')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, padding: 16, backgroundColor: colors.surface, boxShadow: colors.elevation1, marginTop: 12 }}>

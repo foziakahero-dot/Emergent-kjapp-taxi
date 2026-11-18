@@ -17,6 +17,7 @@ from unittest.mock import Mock, patch
 
 import mongomock
 from email_delivery import email_configured
+from qa_panels import QA_FLEET_URL
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException, Request, Response
@@ -51,7 +52,7 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
         async def rate(*args): pass
         async def confirmation(*args): return 'not_configured'
         self.mail = Mock(return_value=False)
-        self.ns = dict(asyncio=asyncio, os=os, secrets=secrets, html_escape=html,
+        self.ns = dict(APP_ENV="test", QA_FLEET_URL=QA_FLEET_URL, asyncio=asyncio, os=os, secrets=secrets, html_escape=html,
                        datetime=datetime, timezone=timezone, timedelta=timedelta,
                        ObjectId=ObjectId, InvalidId=InvalidId, HTTPException=HTTPException,
                        Request=Request, Response=Response, BaseModel=BaseModel,
@@ -90,6 +91,11 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['fleet_id'],str(self.fleet_id))
         listing=await self.ns['fleet_list_driver_invites'](self.current)
         self.assertEqual(listing['invites'][0]['invite_url'],result['invite_url'])
+
+    async def test_qa_invite_uses_hosted_fleet_route(self):
+        self.ns['APP_ENV'] = 'qa'
+        result = await self.create()
+        self.assertEqual(result['invite_url'], QA_FLEET_URL + '/driver-signup/' + result['token'])
 
     async def test_delivery_success_and_provider_failure(self):
         os.environ['SENDGRID_API_KEY']='test-placeholder'
