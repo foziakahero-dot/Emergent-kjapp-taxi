@@ -29,7 +29,7 @@ before(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', headless: true });
 });
 after(async () => { await browser?.close(); if (server) await new Promise(r => server.close(r)); });
 

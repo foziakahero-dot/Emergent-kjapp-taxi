@@ -1,0 +1,65 @@
+name: SNAR QA panel release gate
+
+on:
+  pull_request:
+    branches: [qa/snar-v10-phase5-staging-e2e]
+    paths:
+      - 'admin-web/**'
+      - 'fleet-web/**'
+      - 'scripts/panel-proxy-routing.test.mjs'
+      - '.github/workflows/qa-panel-release-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-panel-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  panels:
+    name: Build and test ${{ matrix.panel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        panel: [admin-web, fleet-web]
+    defaults:
+      run:
+        working-directory: ${{ matrix.panel }}
+    env:
+      PW_CHANNEL: chromium
+      VITE_API_BASE: /api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.panel }}/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build the panel
+        run: npm run build
+      - name: Install the locked Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Test Admin queue states with isolated responses
+        if: matrix.panel == 'admin-web'
+        run: node --test tests/fleet-applications.browser.test.mjs
+      - name: Test Fleet stores and access boundaries
+        if: matrix.panel == 'fleet-web'
+        run: node --test tests/dashboard-resource.test.mjs
+      - name: Test Fleet dashboard with isolated responses
+        if: matrix.panel == 'fleet-web'
+        run: node --test tests/overview.browser.test.mjs
+      - name: Check QA proxy routing and document forwarding
+        if: matrix.panel == 'fleet-web'
+        run: node ../scripts/panel-proxy-routing.test.mjs
+      - name: Retain synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-panel-${{ matrix.panel }}-${{ github.sha }}
+          path: ${{ matrix.panel }}/qa-evidence/*.png
+          retention-days: 14
