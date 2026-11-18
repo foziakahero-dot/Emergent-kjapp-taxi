@@ -1,0 +1,68 @@
+name: SNAR Customer QA build and settings E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        type: string
+        required: true
+        description: Full reviewed source SHA
+
+jobs:
+  validate:
+    name: Verify exact QA source and native preflight
+    environment: preview
+    runs_on: linux-medium
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: qa
+      EAS_BUILD_PLATFORM: android
+      KJAPP_REQUIRE_FIREBASE: 'true'
+      EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+      QA_ANDROID_PACKAGE: no.kjapp.app
+      QA_ANDROID_CERT_SHA1: '44:C8:7B:B8:9C:6E:E9:9B:34:AA:99:7D:B5:A6:70:AD:74:0C:E4:2C'
+      QA_REQUIRE_GOOGLE_OAUTH: 'true'
+    steps:
+      - uses: eas/checkout
+      - name: Verify reviewed source
+        run: node -e 'const c=require("node:child_process");const s=process.env.EXPECTED_SOURCE_SHA;if(!/^[a-f0-9]{40}$/.test(s||"")||c.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim()!==s)throw Error("Reviewed source mismatch");'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run eas-build-post-install
+      - name: Verify QA runtime and Firebase signing metadata
+        run: |
+          task_repo_root=$(git rev-parse --show-toplevel)
+          node "$task_repo_root/scripts/phase5-qa-backend-preflight.cjs"
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" file
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" package
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" signing
+      - run: npx expo prebuild --no-install --platform android
+  build:
+    name: Build reviewed Customer QA APK
+    needs: [validate]
+    type: build
+    environment: preview
+    params:
+      platform: android
+      profile: qa
+  test:
+    name: Test the APK from this workflow
+    needs: [build]
+    type: maestro
+    environment: preview
+    runs_on: linux-medium-nested-virtualization
+    env:
+      MAESTRO_APP_ID: no.kjapp.app
+    params:
+      build_id: ${{ needs.build.outputs.build_id }}
+      flow_path:
+        - .maestro/beta/02-dark-mode.yml
+        - .maestro/beta/03-privacy-language.yml
+      retries: 0
+      shards: 1
+      record_screen: false
+      output_format: junit
+    hooks:
+      before_maestro_tests:
+        - name: Require dedicated synthetic fixture credentials
+          run: node -e 'if(!/^qa-.*@example\.invalid$/.test(process.env.MAESTRO_QA_CUSTOMER_EMAIL||"")||!process.env.MAESTRO_QA_CUSTOMER_PASSWORD)throw Error("Synthetic QA credentials missing");'

@@ -1,0 +1,12 @@
+appId: ${MAESTRO_APP_ID}
+---
+- tapOn:
+    id: tab-profile
+- extendedWaitUntil:
+    visible:
+      id: profile-settings
+    timeout: 15000
+- tapOn:
+    id: profile-settings
+- assertVisible:
+    id: customer-settings-screen

@@ -1,0 +1,43 @@
+appId: ${MAESTRO_APP_ID}
+name: Syntetisk QA-kunde logger inn
+---
+- launchApp:
+    permissions:
+      all: allow
+- setLocation:
+    latitude: 59.9230
+    longitude: 10.7310
+- runFlow:
+    when:
+      visible:
+        id: onboarding-login
+    commands:
+      - tapOn:
+          id: onboarding-login
+- runFlow:
+    when:
+      visible:
+        id: login-phone
+    commands:
+      - tapOn:
+          id: login-switch-method
+- runFlow:
+    when:
+      visible:
+        id: login-email
+    commands:
+      - tapOn:
+          id: login-email
+      - eraseText
+      - inputText: ${MAESTRO_QA_CUSTOMER_EMAIL}
+      - tapOn:
+          id: login-password
+      - eraseText
+      - inputText: ${MAESTRO_QA_CUSTOMER_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: login-submit
+- extendedWaitUntil:
+    visible:
+      id: home-map
+    timeout: 60000

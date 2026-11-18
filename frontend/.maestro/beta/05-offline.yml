@@ -1,0 +1,13 @@
+appId: ${MAESTRO_APP_ID}
+name: Nettbrudd vises uten en falsk tom bilflåte
+tags: [qa, beta, android, offline]
+# Runneren logger inn først og kobler emulatorens Wi-Fi/data fra.
+# Denne filen alene kobler ikke fra nettet; kjør gjennom run_beta_suite.py.
+---
+- assertVisible:
+    id: home-map
+- extendedWaitUntil:
+    visible: 'Kan ikke oppdatere ledige biler akkurat nå\.'
+    timeout: 30000
+- assertNotVisible: 'Ingen ledige biler i nærheten akkurat nå'
+- takeScreenshot: beta-availability-offline

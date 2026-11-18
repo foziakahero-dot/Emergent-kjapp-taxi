@@ -1,0 +1,49 @@
+appId: ${MAESTRO_APP_ID}
+name: Mørkt tema lagres og Hjem åpner etter omstart
+tags: [qa, beta, settings]
+---
+- runFlow: common/login.yml
+- runFlow: common/settings.yml
+- tapOn:
+    id: theme-open
+- tapOn:
+    id: theme-choice-light
+- tapOn:
+    id: tab-home
+- assertVisible:
+    id: home-map
+- takeScreenshot: beta-home-light
+- runFlow: common/settings.yml
+- tapOn:
+    id: theme-open
+- tapOn:
+    id: theme-choice-dark
+- tapOn:
+    id: theme-open
+- assertVisible:
+    id: theme-choice-dark
+    checked: true
+- tapOn:
+    id: theme-choice-dark
+- tapOn:
+    id: tab-home
+- assertVisible:
+    id: home-map
+- takeScreenshot: beta-home-dark
+# clearState brukes ikke: lagrede preferanser skal overleve prosessomstart.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: home-map
+    timeout: 30000
+- runFlow: common/settings.yml
+- tapOn:
+    id: theme-open
+- assertVisible:
+    id: theme-choice-dark
+    checked: true
+- tapOn:
+    id: theme-choice-light
+- tapOn:
+    id: tab-home

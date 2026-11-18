@@ -1,0 +1,128 @@
+[
+  {
+    "check": "health",
+    "url": "https://api-qa.snarapp.no/api/health",
+    "observed_at": "2026-11-18T19:13:44.099387+00:00",
+    "http": 200,
+    "data": {
+      "status": "ok",
+      "db": true,
+      "release": {
+        "commit": "afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a",
+        "environment": "qa"
+      },
+      "time": "2026-11-18T19:13:50.464427+00:00"
+    }
+  },
+  {
+    "check": "ready",
+    "url": "https://api-qa.snarapp.no/api/ready",
+    "observed_at": "2026-11-18T19:13:44.099938+00:00",
+    "http": 200,
+    "data": {
+      "ready": true,
+      "status": "ready",
+      "checks": {
+        "database": true,
+        "production_mode": false,
+        "qa_mode": true,
+        "qa_database_isolated": true,
+        "demo_data_disabled": true,
+        "jwt_configured": true,
+        "admin_identity_configured": true,
+        "stripe_key_configured": true,
+        "stripe_webhook_configured": true,
+        "stripe_live_mode_configured": true,
+        "stripe_test_mode_configured": true,
+        "email_configured": true,
+        "public_web_origin_configured": true,
+        "expo_push_sender": true,
+        "identity_recheck_policy_days": [
+          30,
+          90
+        ],
+        "identity_inactivity_days": 30,
+        "apple_native_auth_configured": true,
+        "apple_bundle_env_matches": true,
+        "object_storage_configured": true,
+        "document_storage_backend": "mongodb",
+        "service_area_enforced": true,
+        "auto_charge_enabled": false,
+        "booking_enabled": true
+      },
+      "blockers": [],
+      "release": {
+        "commit": "afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a",
+        "environment": "qa"
+      },
+      "time": "2026-11-18T19:13:50.469214+00:00"
+    }
+  },
+  {
+    "check": "payment",
+    "url": "https://api-qa.snarapp.no/api/payments/native/config",
+    "observed_at": "2026-11-18T19:13:44.100764+00:00",
+    "http": 200,
+    "data": {
+      "cash_enabled": true,
+      "enabled": true,
+      "test_mode": true,
+      "google_pay_enabled": false,
+      "apple_pay_enabled": false,
+      "web_wallets_enabled": false
+    }
+  },
+  {
+    "check": "otp",
+    "url": "https://api-qa.snarapp.no/api/auth/customer/otp/config",
+    "observed_at": "2026-11-18T19:13:44.104217+00:00",
+    "http": 200,
+    "data": {
+      "enabled": false,
+      "existing_accounts_only": true,
+      "signup_enabled": false
+    }
+  },
+  {
+    "check": "admin_qa",
+    "url": "https://api-qa.snarapp.no/api/qa-admin/qa-release.json",
+    "observed_at": "2026-11-18T19:13:44.104827+00:00",
+    "http": 200,
+    "data": {
+      "panel": "admin-web",
+      "environment": "qa",
+      "api": "https://api-qa.snarapp.no",
+      "commit": "afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a"
+    }
+  },
+  {
+    "check": "fleet_qa",
+    "url": "https://api-qa.snarapp.no/api/qa-fleet/qa-release.json",
+    "observed_at": "2026-11-18T19:13:44.107009+00:00",
+    "http": 200,
+    "data": {
+      "panel": "fleet-web",
+      "environment": "qa",
+      "api": "https://api-qa.snarapp.no",
+      "commit": "afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a"
+    }
+  },
+  {
+    "check": "admin_domain",
+    "url": "https://admin.snarapp.no",
+    "observed_at": "2026-11-18T19:13:44.108182+00:00",
+    "http": 402
+  },
+  {
+    "check": "fleet_domain",
+    "url": "https://fleet.snarapp.no",
+    "observed_at": "2026-11-18T19:13:44.109555+00:00",
+    "http": 402
+  },
+  {
+    "check": "public_site",
+    "url": "https://snarapp.no",
+    "observed_at": "2026-11-18T19:13:44.111389+00:00",
+    "http": 402
+  }
+]
