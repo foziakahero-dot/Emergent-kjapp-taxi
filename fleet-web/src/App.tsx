@@ -94,7 +94,7 @@ function PortalShell() {
       <main className="portal-main">
         <div className="portal-topbar" aria-hidden="true">
           <span>{fleet?.name || 'SNAR Fleet'}</span>
-          <span className="portal-topbar-status"><i /> System online</span>
+          <span>Partnerportal</span>
         </div>
         <Routes>
           <Route path="/" element={<OperationsDashboardPage />} />
@@ -135,5 +135,5 @@ export default function App() {
       </Routes>
     );
   }
-  return <PortalShell />;
+  return <PortalShell key={JSON.stringify([user.id ?? user.email, user.fleet_id])} />;
 }

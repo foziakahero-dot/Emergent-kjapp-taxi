@@ -13,7 +13,7 @@ function Loading() {
 }
 
 export function SnarLoginPage() {
-  const { login } = useAuth();
+  const { login, sessionNotice } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,6 +49,7 @@ export function SnarLoginPage() {
         <div className="login-card-kicker">PARTNERPORTAL</div>
         <h2>Velkommen tilbake</h2>
         <p>For godkjente løyvehavere og flåtepartnere</p>
+        {sessionNotice && <div role="alert" className="error-box">{sessionNotice}</div>}
         <label className="sr-only" htmlFor="fleet-email">E-post</label>
         <input id="fleet-email" type="email" autoComplete="email" placeholder="E-post" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <label className="sr-only" htmlFor="fleet-password">Passord</label>

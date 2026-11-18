@@ -12,6 +12,7 @@ export type FleetUser = {
 
 type AuthContextValue = {
   user: FleetUser | null | undefined;
+  sessionNotice: string;
   login: (email: string, password: string) => Promise<FleetUser>;
   logout: () => void;
 };
@@ -31,28 +32,29 @@ function assertFleetOwner(user: FleetUser | undefined | null) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FleetUser | null | undefined>(undefined);
 
+  const [sessionNotice, setSessionNotice] = useState('');
   useEffect(() => {
-    setUnauthorizedHandler(() => {
+    let mounted = true;
+    const endSession = (status: 401 | 403) => {
+      sessionStorage.removeItem(TOKEN_KEY);
+      setSessionNotice(status === 403
+        ? 'Du har ikke lenger tilgang til flåten. Kontakt administrator hvis dette er feil.'
+        : 'Økten er utløpt. Logg inn på nytt.');
+      setUser(null);
+    };
+    setUnauthorizedHandler(endSession);
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    const isCurrent = () => mounted && token === sessionStorage.getItem(TOKEN_KEY);
+    if (!token) setUser(null);
+    else api.me().then((u) => {
+      if (!isCurrent()) return;
+      try { setUser(assertFleetOwner(u)); } catch { endSession(403); }
+    }).catch(() => {
+      if (!isCurrent()) return;
       sessionStorage.removeItem(TOKEN_KEY);
       setUser(null);
     });
-    const token = sessionStorage.getItem(TOKEN_KEY);
-    if (!token) {
-      setUser(null);
-      return;
-    }
-    api.me()
-      .then((u) => {
-        try { setUser(assertFleetOwner(u)); }
-        catch {
-          sessionStorage.removeItem(TOKEN_KEY);
-          setUser(null);
-        }
-      })
-      .catch(() => {
-        sessionStorage.removeItem(TOKEN_KEY);
-        setUser(null);
-      });
+    return () => { mounted = false; setUnauthorizedHandler(() => {}); };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -62,16 +64,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const next = assertFleetOwner(res?.user);
     sessionStorage.setItem(TOKEN_KEY, res.token);
+    setSessionNotice('');
     setUser(next);
     return next;
   };
 
   const logout = () => {
+    setSessionNotice('');
     sessionStorage.removeItem(TOKEN_KEY);
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, logout, sessionNotice }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

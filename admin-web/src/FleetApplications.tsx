@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, apiError } from './api';
 import { useAuth } from './auth';
 import { Btn, Card, Empty, ErrorBanner, KV, Loader, PageHead, Pill, fmtDate } from './ui';
@@ -12,11 +12,14 @@ const DOC_LABELS: Record<string, string> = {
   bank: 'Bankkonto',
 };
 
+type QueueState = { phase: 'loading' | 'error' | 'forbidden' } | { phase: 'ready'; apps: any[] };
+
 export default function FleetApplications() {
   const { user } = useAuth();
   const [status, setStatus] = useState('pending');
-  const [apps, setApps] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [queue, setQueue] = useState<QueueState>({ phase: 'loading' });
+  const listRequest = useRef(0);
+  const detailRequest = useRef(0);
   const [err, setErr] = useState('');
   const [selected, setSelected] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -33,94 +36,120 @@ export default function FleetApplications() {
       .catch(() => setErr('Kunne ikke hente standard serviceavgift. Oppdater før godkjenning.'));
   }, [isSuperadmin]);
 
-  const load = async () => {
-    if (!isSuperadmin) return;
-    setLoading(true);
-    setErr('');
-    try {
-      const data = await api.fleetApplications(status);
-      setApps(data?.applications || []);
-    } catch (e) {
-      setErr(apiError(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, isSuperadmin]);
-
-  const openApplication = async (id: string) => {
-    setApprovalResult(null);
-    setCommission(defaultCommission);
-    setDetailLoading(true);
-    setErr('');
-    try {
-      const data = await api.fleetApplication(id);
-      setSelected(data);
-      setNotes(data?.review_notes || '');
-    } catch (e) {
-      setErr(apiError(e));
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const close = () => {
+  const close = useCallback(() => {
+    ++detailRequest.current;
     setApprovalResult(null);
     setSelected(null);
     setNotes('');
+    setDetailLoading(false);
+    setBusy(false);
+    setErr('');
+  }, []);
+
+  const clearIfDenied = useCallback((e: any) => {
+    if (e?.response?.status !== 401 && e?.response?.status !== 403) return false;
+    ++listRequest.current;
+    close();
+    setQueue({ phase: 'forbidden' });
+    return true;
+  }, [close]);
+
+  const load = useCallback(async (filter: string) => {
+    const request = ++listRequest.current;
+    setQueue({ phase: 'loading' });
+    try {
+      const data = await api.fleetApplications(filter);
+      if (request !== listRequest.current) return;
+      if (!Array.isArray(data?.applications) || !data.applications.every((a: any) => a?.id)) {
+        setQueue({ phase: 'error' });
+        return;
+      }
+      setQueue({ phase: 'ready', apps: data.applications });
+    } catch (e) {
+      if (request === listRequest.current && !clearIfDenied(e)) setQueue({ phase: 'error' });
+    }
+  }, [clearIfDenied]);
+
+  useEffect(() => {
+    if (isSuperadmin) void load('pending');
+    return () => { ++listRequest.current; ++detailRequest.current; };
+  }, [isSuperadmin, load]);
+
+  const changeFilter = (filter: string) => {
+    close();
+    setStatus(filter);
+    void load(filter);
+  };
+
+  const openApplication = async (id: string) => {
+    close();
+    const request = detailRequest.current;
+    setCommission(defaultCommission);
+    setDetailLoading(true);
+    try {
+      const data = await api.fleetApplication(id);
+      if (request !== detailRequest.current) return;
+      setSelected(data);
+      setNotes(data?.review_notes || '');
+    } catch (e) {
+      if (request === detailRequest.current && !clearIfDenied(e)) setErr(apiError(e));
+    } finally {
+      if (request === detailRequest.current) setDetailLoading(false);
+    }
   };
 
   const approve = async () => {
     if (!selected?.id) return;
+    const request = detailRequest.current;
     setBusy(true);
     setErr('');
     try {
       if (commission == null || !Number.isFinite(commission) || commission < 0 || commission > 50) throw new Error('Oppgi serviceavgift mellom 0 og 50 %.');
       const result = await api.approveFleetApplication(selected.id, notes, commission / 100);
+      if (request !== detailRequest.current) return;
       setApprovalResult(result);
       setSelected((value: any) => ({ ...value, status: 'approved', fleet_id: result.fleet_id, reviewed_at: new Date().toISOString() }));
-      await load();
+      await load(status);
     } catch (e) {
-      setErr(apiError(e));
+      if (request === detailRequest.current && !clearIfDenied(e)) setErr(apiError(e));
     } finally {
-      setBusy(false);
+      if (request === detailRequest.current) setBusy(false);
     }
   };
 
   const reject = async () => {
     if (!selected?.id) return;
+    const request = detailRequest.current;
     setBusy(true);
     setErr('');
     try {
       await api.rejectFleetApplication(selected.id, notes);
+      if (request !== detailRequest.current) return;
       close();
-      await load();
+      await load(status);
     } catch (e) {
-      setErr(apiError(e));
+      if (request === detailRequest.current && !clearIfDenied(e)) setErr(apiError(e));
     } finally {
-      setBusy(false);
+      if (request === detailRequest.current) setBusy(false);
     }
   };
 
   const openDoc = async (doc: any) => {
     if (!doc?.path) return;
+    const request = detailRequest.current;
     try {
       const blob = await api.applicationFile(doc.path);
+      if (request !== detailRequest.current) return;
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
-      setErr(apiError(e));
+      if (request === detailRequest.current && !clearIfDenied(e)) setErr(apiError(e));
     }
   };
 
-  const counts = useMemo(() => ({
-    total: apps.length,
-  }), [apps]);
+  const apps = queue.phase === 'ready' ? queue.apps : null;
+  const refresh = () => { void load(status); };
 
   if (!isSuperadmin) {
     return (
@@ -136,16 +165,16 @@ export default function FleetApplications() {
       <PageHead
         title="Løyvehaversøknader"
         sub="Dokumentkontroll og godkjenning før tilgang til fleet.snarapp.no"
-        right={<Btn variant="sm" onClick={load}>Oppdater</Btn>}
+        right={<Btn variant="sm" onClick={refresh}>Oppdater</Btn>}
       />
 
       <div className="toolbar" style={{ marginBottom: 16 }}>
-        <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="select" aria-label="Søknadsstatus" value={status} onChange={(e) => changeFilter(e.target.value)}>
           <option value="pending">Venter på godkjenning</option>
           <option value="approved">Godkjente</option>
           <option value="rejected">Avslåtte</option>
         </select>
-        <div className="dim" style={{ fontSize: 12 }}>{counts.total} søknader i visningen</div>
+        {apps && <div className="dim" style={{ fontSize: 12 }}>{apps.length} søknad{apps.length === 1 ? '' : 'er'} i visningen</div>}
       </div>
 
       <ErrorBanner msg={err} />
@@ -165,8 +194,11 @@ export default function FleetApplications() {
       </Card>
 
       <div className="app-layout" style={{marginTop:20}}>
-        <section className="card app-list"><div className="card-head"><h2 className="card-title">Søknader ({apps.length})</h2></div>
-          {loading ? <Loader/> : apps.length ? apps.map((a:any) => <button key={a.id} className={`application-row ${selected?.id === a.id ? 'selected' : ''}`} onClick={() => openApplication(a.id)}><strong>{a.company_name || 'Ukjent bedrift'}</strong><span className="application-meta">{a.org_number || '—'} · {a.contact_name || '—'}</span><span className="application-meta">{fmtDate(a.submitted_at || a.created_at)} · {a.documents_count ?? Object.keys(a.documents || {}).length}/5 dokumenter</span><Pill status={a.status}/></button>) : <Empty title="Ingen søknader i denne statusen"/>}
+        <section className="card app-list" aria-busy={queue.phase === 'loading'}><div className="card-head"><h2 className="card-title">Søknader{apps && ` (${apps.length})`}</h2></div>
+          {queue.phase === 'loading' ? <div role="status" aria-label="Henter søknader"><Loader/></div> : !apps ? <div>
+            <div role="alert" className="error-banner">{queue.phase === 'forbidden' ? 'Du har ikke tilgang til å se søknadene.' : 'Kunne ikke hente søknadene. Antallet er ukjent.'}</div>
+            <Btn onClick={refresh}>Prøv igjen</Btn>
+          </div> : apps.length ? apps.map((a:any) => <button key={a.id} className={`application-row ${selected?.id === a.id ? 'selected' : ''}`} onClick={() => openApplication(a.id)}><strong>{a.company_name || 'Ukjent bedrift'}</strong><span className="application-meta">{a.org_number || '—'} · {a.contact_name || '—'}</span><span className="application-meta">{fmtDate(a.submitted_at || a.created_at)} · {a.documents_count ?? Object.keys(a.documents || {}).length}/5 dokumenter</span><Pill status={a.status}/></button>) : <Empty title="Ingen søknader i denne statusen"/>}
         </section>
         <section className="card app-detail" aria-busy={detailLoading}>
           {detailLoading ? <Loader/> : !selected ? <Empty title="Velg en søknad" sub="Kontroller dokumentene før godkjenning eller avslag."/> : <>
