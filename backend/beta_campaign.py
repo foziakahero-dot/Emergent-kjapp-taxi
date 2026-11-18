@@ -662,28 +662,8 @@ def install_beta_campaign(api, db, require_admin, audit) -> None:
                      {"active": True}, {"active": False}, "Admin deactivated campaign")
         return {"ok": True, "config": config.model_dump()}
 
-    # Internal endpoints for ride_reservations integration
-    @api.post("/internal/beta-campaign/reserve")
-    async def internal_reserve(customer_id: str, trip_id: str, estimated_price_kr: int, commission_rate: float):
-        """Internal endpoint: reserve campaign ride at booking."""
-        allowed, discount_kr, attempt_id = await reserve_campaign_ride(
-            db, customer_id, trip_id, estimated_price_kr, commission_rate
-        )
-        return {"allowed": allowed, "discount_kr": discount_kr, "attempt_id": attempt_id}
-
-    @api.post("/internal/beta-campaign/complete")
-    async def internal_complete(customer_id: str, trip_id: str, actual_price_kr: int, commission_rate: float):
-        """Internal endpoint: complete campaign ride after settlement."""
-        success, discount_kr, fee_ore = await complete_campaign_ride(
-            db, customer_id, trip_id, actual_price_kr, commission_rate
-        )
-        return {"success": success, "discount_kr": discount_kr, "platform_fee_ore": fee_ore}
-
-    @api.post("/internal/beta-campaign/cancel")
-    async def internal_cancel(customer_id: str, trip_id: str):
-        """Internal endpoint: cancel campaign reservation."""
-        success = await cancel_campaign_reservation(db, customer_id, trip_id)
-        return {"success": success}
+    # Ride settlement invokes the Python helpers directly. Do not expose
+    # unauthenticated HTTP mutations that can fabricate campaign redemptions.
 
 
 # Helper functions for ride_reservations integration
