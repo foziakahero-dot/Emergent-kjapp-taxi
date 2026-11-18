@@ -4,6 +4,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.staticfiles import StaticFiles
 
 
+QA_PANEL_HOST = "https://api-qa.snarapp.no"
+QA_FLEET_URL = QA_PANEL_HOST + "/api/qa-fleet"
+QA_ADMIN_APPLICATIONS_URL = QA_PANEL_HOST + "/api/qa-admin/#/fleet-applications"
+
+
 class PanelFiles(StaticFiles):
     async def get_response(self, path, scope):
         try:

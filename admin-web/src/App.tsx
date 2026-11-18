@@ -7,6 +7,7 @@ import Login from './Login';
 import { Icon, SnarMark } from './snar-ui';
 import FleetApplications from './FleetApplications';
 import BetaWaitlist from './BetaWaitlist';
+import DriverBonuses from './DriverBonuses';
 import Students from './Students';
 import Receipts from './Receipts';
 import {
@@ -36,6 +37,7 @@ const NAV = [
     { to: '/receipts', label: 'Kvitteringer', ic: 'file', perm: 'finance' },
     { to: '/finance', label: 'Økonomi', ic: 'wallet', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: 'creditcard', perm: 'finance' },
+    { to: '/driver-bonuses', label: 'Sjåførbonus', ic: 'wallet', perm: 'finance' },
     { to: '/pricing', label: 'Prissetting', ic: 'tag', perm: 'system' },
   ]},
   { group: 'Kommunikasjon & support', items: [
@@ -179,6 +181,7 @@ function Shell() {
             <Route path="/receipts" element={gate('finance', <Receipts />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
+            <Route path="/driver-bonuses" element={gate('finance', <DriverBonuses />)} />
             <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />
             <Route path="/actions" element={gate('operations', <ActionCenter />)} />

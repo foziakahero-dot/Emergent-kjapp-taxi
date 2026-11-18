@@ -153,6 +153,7 @@ export const driverApi = {
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
   location: publishDriverLocation,
   demand: () => api.get('/driver/demand').then(r => r.data),
+  bonuses: () => api.get<{ campaigns: { id: string; name: string; progress: number; trips_required: number; bonus_kr: number; cap_reached: boolean; start_hour: number; end_hour: number }[] }>('/driver/bonus').then(r => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),

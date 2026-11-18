@@ -16,7 +16,7 @@ from bson import ObjectId
 
 from email_delivery import email_configured, send_transactional_email
 from onboarding_emails import deliver_one, queue_confirmation
-from qa_safety import is_safe_qa_web_origin
+from qa_panels import QA_ADMIN_APPLICATIONS_URL, QA_FLEET_URL
 from test_fleet_invitation_delivery import Collection
 from test_marketing_waitlist_unit import make_client, valid_payload
 
@@ -58,7 +58,7 @@ def prepare(db, app_env="production"):
     source = ast.parse((Path(__file__).parents[1] / "server.py").read_text())
     node = next(n for n in source.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "_prepare_onboarding_email")
     namespace = dict(db=db, html_escape=html, secrets=secrets, datetime=datetime, timezone=timezone,
-                     timedelta=timedelta, os=os, APP_ENV=app_env, is_safe_qa_web_origin=is_safe_qa_web_origin,
+                     timedelta=timedelta, os=os, APP_ENV=app_env, QA_ADMIN_APPLICATIONS_URL=QA_ADMIN_APPLICATIONS_URL, QA_FLEET_URL=QA_FLEET_URL,
                      _password_reset_token_hash=lambda token: hashlib.sha256(token.encode()).hexdigest())
     exec(compile(ast.Module(body=[node], type_ignores=[]), "server.py", "exec"), namespace)
     return namespace["_prepare_onboarding_email"]
@@ -176,15 +176,11 @@ def test_qa_setup_rejects_production_fleet_origin(monkeypatch):
     raw.users.insert_one({"email": "owner@example.com", "role": "fleet_owner", "approved": True, "fleet_id": "fleet"})
     async def check():
         await queue_confirmation(db, "fleet-approved", "application", "owner@example.com", "Firma")
-        sender = Mock()
+        monkeypatch.setenv("FLEET_PUBLIC_URL", "https://fleet.snarapp.no")
+        sender = Mock(return_value=True)
         await deliver_one(db, sender, prepare(db, "qa"))
-        sender.assert_not_called()
-        assert raw.password_reset_tokens.count_documents({}) == 0
-        monkeypatch.setenv("FLEET_PUBLIC_URL", "https://fleet-qa.example.com")
-        raw.onboarding_email_outbox.update_one({}, {"$set": {"next_attempt_at": datetime.now(timezone.utc)}})
-        sender.return_value = True
-        await deliver_one(db, sender, prepare(db, "qa"))
-        assert "https://fleet-qa.example.com/reset-password/" in sender.call_args.args[2]
+        assert QA_FLEET_URL + "/reset-password/" in sender.call_args.args[2]
+        assert "https://fleet.snarapp.no" not in sender.call_args.args[2]
     asyncio.run(check())
 
 

@@ -45,7 +45,9 @@ export default function Login() {
           <form className="login-form" onSubmit={submit}>
             <label className="login-field"><span>E-postadresse</span><input type="email" autoComplete="username" autoFocus required value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@snarapp.no"/></label>
             <label className="login-field"><span>Passord</span><input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)}/></label>
-            <a className="login-forgot" href="/forgot-password">Glemt passord?</a>
+            {(import.meta as any).env.VITE_APP_ENV === 'qa'
+              ? <button type="button" className="login-forgot" onClick={() => setErr('Kontakt den som administrerer SNAR QA for å få gjenopprettet admintilgangen.')}>Glemt passord?</button>
+              : <a className="login-forgot" href="/forgot-password">Glemt passord?</a>}
             <Btn variant="primary full" type="submit" disabled={loading || !email || !password}>{loading ? 'Logger inn…' : 'Fortsett'}</Btn>
           </form>
         ) : (
