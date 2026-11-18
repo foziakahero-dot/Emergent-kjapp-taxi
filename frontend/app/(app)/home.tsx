@@ -25,7 +25,7 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
-import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
@@ -39,6 +39,8 @@ export default function Home() {
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
   const [mapOnly, setMapOnly] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
 
   const queryClient = useQueryClient();
   // GlobalCustomerShell owns polling. This observer only reads its shared state.
@@ -112,6 +114,15 @@ export default function Home() {
     specialNeeds: searchingTrip ? activeTrip.special_needs : specialNeeds,
   });
   const cars = available.cars;
+  const pickupOptionsQuery = useQuery({
+    queryKey: ['pickup-options', user?.id, pickupPoint.lat, pickupPoint.lng, specialNeeds],
+    queryFn: ({ signal }) => carsApi.pickupOptions(pickupPoint.lat, pickupPoint.lng, specialNeeds, signal),
+    enabled: focused && foreground && Boolean(user?.id && dropoff && (locationReady || selectedPickup) && !activeTrip && !mapOnly && !searchOpen && bookingStage === 'vehicles'),
+    refetchInterval: 8000,
+    retry: false,
+  });
+  const pickupOptions = !pickupOptionsQuery.isError && Date.now() - pickupOptionsQuery.dataUpdatedAt < 15_000
+    ? pickupOptionsQuery.data : undefined;
 
   useEffect(() => {
     if (!retryTripId) return;
@@ -158,9 +169,11 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
+      setFocused(true);
       loadMethods();
       void loadPlaces();
       void queryClient.invalidateQueries({ queryKey: ['customer-active-trip', user?.id] });
+      return () => setFocused(false);
     }, [loadMethods, loadPlaces, queryClient, user?.id]),
   );
 
@@ -229,6 +242,7 @@ export default function Home() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => {
+      setForeground(state === 'active');
       if (state === 'active' && !selectedPickup) void refreshLocation(false);
     });
     return () => subscription.remove();
@@ -400,7 +414,9 @@ export default function Home() {
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} quoteFresh={quoteFresh} vehicle={selType} price={selectedPrice}
-        nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        nearest={nearest} availableDrivers={selectedPickup ? undefined : cars} driverPosition={available.center} vehicleEtas={vehicleEtas}
+        pickupOptions={pickupOptions} pickupOptionsUnavailable={pickupOptionsQuery.isError}
+        payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         onWalletSaved={async card => {
           const selected = await paymentApi.setDefault(card.id);
           if (selected.default_payment_method_id !== card.id) throw new Error('Lommeboken ble ikke valgt.');

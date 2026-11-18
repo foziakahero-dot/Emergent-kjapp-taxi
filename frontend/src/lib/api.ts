@@ -99,6 +99,10 @@ export async function nearbyDriverMediaSource(driverId: string, kind: 'profile' 
 export const carsApi = {
   nearby: (lat: number, lng: number, vehicle_type?: string, special_needs: string[] = []) =>
     api.post('/cars/nearby', { lat, lng, vehicle_type, special_needs }).then((r) => r.data),
+  pickupOptions: (lat: number, lng: number, special_needs: string[], signal?: AbortSignal) =>
+    api.post<{ options: Record<string, { distance_km: number; eta_min: number | null }> }>(
+      '/cars/pickup-options', { lat, lng, special_needs }, { signal, timeout: 5000 },
+    ).then(r => r.data.options),
 };
 
 export const placesApi = {

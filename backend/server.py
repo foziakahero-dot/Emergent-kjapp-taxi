@@ -1963,6 +1963,26 @@ async def cars_nearby(body: NearbyCarsRequest, current=Depends(require_customer)
     return await _nearby_cars_snapshot(body, current)
 
 
+@api.post("/cars/pickup-options")
+async def pickup_options(body: NearbyCarsRequest, request: Request, current=Depends(require_customer)):
+    """Summarize the nearest dispatch candidate in each category for this pickup."""
+    await _enforce_rate_limit(request, "pickup-options", 120, 60)
+    candidates = await _dispatch_candidates(
+        body.lat, body.lng, _required_driver_capabilities(body.special_needs),
+        vehicle_type=body.vehicle_type, customer_id=current["id"],
+    )
+    nearest = {}
+    for candidate in candidates:
+        nearest.setdefault(candidate["vehicle_type"], {
+            "lat": candidate["lat"], "lng": candidate["lng"], "distance_km": candidate["km"],
+        })
+    road_eta.enrich(list(nearest.values()), (body.lat, body.lng))
+    return {"options": {
+        category: {"distance_km": round(car["distance_km"], 1), "eta_min": car.get("eta_min")}
+        for category, car in nearest.items()
+    }}
+
+
 async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
     """Only available drivers with a current login and fresh GPS inside 5 km."""
     test_customer = ride_testing.is_test_customer(caller.get("id"))
@@ -4322,6 +4342,7 @@ def _recent_driver_reservation(locked_at, now=None) -> bool:
 async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None, customer_id: Optional[str] = None) -> list:
     """Real, available drivers sorted by actual distance to pickup.
 
+    The nearest eligible driver can be offered the trip regardless of pickup distance.
     Equipment-bound needs (wheelchair/child seat) are hard requirements. Ride class is
     also enforced server-side so a Premium/Komfort booking cannot be assigned to the
     wrong configured vehicle class.
@@ -4332,7 +4353,10 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
     required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     busy = set()
-    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ACTIVE_TRIP_STATUSES}}), {"driver_id": 1}):
+    async for t in db.trips.find(_real_trip_filter({"$or": [
+        {"status": {"$in": ACTIVE_TRIP_STATUSES}},
+        {"status": "arrived", "payment_flow": "cash", "payment_status": "cash_due"},
+    ]}), {"driver_id": 1}):
         if t.get("driver_id"):
             busy.add(t["driver_id"])
     out = []
@@ -4343,12 +4367,13 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
          "online": True, "disabled": {"$ne": True}, "availability_status": {"$in": [None, "available", "idle"]}, "available": {"$ne": False}, "absent": {"$ne": True},
          "away": {"$ne": True}, "on_break": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
          **ride_testing.driver_supply_filter(test_customer),
-         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1,
-         "profile_photo_path": 1},
+         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh},
+         "last_lat": {"$gte": -90, "$lte": 90}, "last_lng": {"$gte": -180, "$lte": 180}},
+        {"last_lat": 1, "last_lng": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1,
+         "car": 1, "plate": 1, "vehicle_access_mode": 1, "allowed_vehicle_ids": 1, "profile_photo_path": 1},
     ):
         did = str(d["_id"])
-        if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
+        if did in busy or await _fleet_is_suspended(d.get("fleet_id")):
             continue
         assigned_vehicle = await _assigned_fleet_vehicle(d, required=False)
         if not assigned_vehicle:
@@ -4363,8 +4388,8 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         if vehicle_type and driver_vehicle_type != vehicle_type:
             continue
         distance = haversine_km(lat, lng, d["last_lat"], d["last_lng"])
-        if distance <= RADIUS_KM:
-            out.append({"id": did, "km": distance})
+        out.append({"id": did, "km": distance, "vehicle_type": driver_vehicle_type,
+                    "lat": d["last_lat"], "lng": d["last_lng"]})
     out.sort(key=lambda x: x["km"])
     return out
 
