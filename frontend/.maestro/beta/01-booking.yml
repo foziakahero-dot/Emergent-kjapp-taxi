@@ -1,0 +1,68 @@
+appId: ${MAESTRO_APP_ID}
+name: Oslo S til bekreftet SNAR-bestilling
+tags: [qa, beta, booking]
+# Oppretter én syntetisk kontanttur. Runneren kontrollerer QA og rydder turen.
+# Dette er bestillingstesten; aksept/fullføring/Stripe TEST er egne releasekrav.
+---
+- runFlow: common/login.yml
+- runFlow: common/search.yml
+- inputText: Oslo S
+- extendedWaitUntil:
+    visible:
+      id: search-result-[0-9]+
+      text: '.*Oslo [sS].*'
+    timeout: 30000
+- tapOn:
+    id: search-result-[0-9]+
+    text: '.*Oslo [sS].*'
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: route-choose-vehicle
+      enabled: true
+    timeout: 30000
+- tapOn:
+    id: route-choose-vehicle
+- scrollUntilVisible:
+    element:
+      id: vehicle-ai-first
+    direction: DOWN
+- tapOn:
+    id: vehicle-ai-first
+    enabled: true
+- assertVisible:
+    id: vehicle-ai-first
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: booking-payment-row
+    direction: DOWN
+- tapOn:
+    id: booking-payment-row
+- tapOn:
+    id: booking-pay-cash
+    enabled: true
+- tapOn:
+    id: booking-payment-done
+- scrollUntilVisible:
+    element:
+      id: booking-review
+    direction: DOWN
+- tapOn:
+    id: booking-review
+    enabled: true
+- assertVisible:
+    id: booking-review-screen
+- takeScreenshot: beta-booking-review
+- scrollUntilVisible:
+    element:
+      id: booking-confirm
+    direction: DOWN
+- tapOn:
+    id: booking-confirm
+    enabled: true
+- extendedWaitUntil:
+    visible:
+      id: booking-matching-card|customer-pickup-sheet
+    timeout: 30000
+- takeScreenshot: beta-booking-accepted

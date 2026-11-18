@@ -1,0 +1,36 @@
+appId: ${MAESTRO_APP_ID}
+name: Personvern og faktisk språkvalg
+tags: [qa, beta, settings, privacy]
+---
+- runFlow: common/login.yml
+- runFlow: common/settings.yml
+- tapOn:
+    id: settings-data
+- assertVisible:
+    id: customer-data-screen
+- assertVisible:
+    id: gdpr-export
+- assertNotVisible:
+    id: home-where-to
+# Ingen eksport, sletting eller deling skjer ved å åpne personvernsiden.
+- runFlow: common/settings.yml
+- tapOn:
+    id: settings-language
+- tapOn:
+    id: language-choice-en
+- assertVisible: Settings
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: home-map
+    timeout: 30000
+- runFlow: common/settings.yml
+- assertVisible: Settings
+- tapOn:
+    id: settings-language
+- tapOn:
+    id: language-choice-nb
+- assertVisible: Innstillinger
+- tapOn:
+    id: tab-home

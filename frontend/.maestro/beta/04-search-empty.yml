@@ -1,0 +1,24 @@
+appId: ${MAESTRO_APP_ID}
+name: Søk uten treff har en tydelig tomtilstand
+tags: [qa, beta, search]
+# Bruk en QA-geokoderfixtur som gir [] for denne teksten for deterministisk test.
+---
+- runFlow: common/login.yml
+- runFlow: common/search.yml
+- inputText: zzqv_sn_ar_no_match_92741
+- extendedWaitUntil:
+    visible: Fant ingen steder
+    timeout: 30000
+- assertNotVisible:
+    id: search-result-[0-9]+
+- assertNotVisible:
+    id: booking-confirm
+- tapOn:
+    id: search-clear
+- inputText: Oslo S
+- extendedWaitUntil:
+    visible:
+      id: search-result-[0-9]+
+    timeout: 30000
+- tapOn:
+    id: search-close

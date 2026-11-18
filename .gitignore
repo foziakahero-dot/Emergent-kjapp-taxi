@@ -30,3 +30,5 @@ backend/secrets/
 keystore.properties
 /artifacts/phase5-qa/
 .netlify/
+# Private local test output may include synthetic login steps. Never commit it.
+/.qa-results/

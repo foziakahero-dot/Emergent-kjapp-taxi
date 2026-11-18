@@ -1,0 +1,10 @@
+{
+  "api": "https://api-qa.snarapp.no",
+  "backendSha": "afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a",
+  "sourceSha": "9e5aef948a2cba928d827267d1de7f0a6d5b8791",
+  "profile": "qa",
+  "appId": "no.kjapp.app",
+  "projectId": "3631002e-5b25-4847-b5d8-05ec2ef304b5",
+  "buildId": "",
+  "apkSha256": ""
+}

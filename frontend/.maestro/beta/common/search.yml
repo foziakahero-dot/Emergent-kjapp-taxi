@@ -1,0 +1,20 @@
+appId: ${MAESTRO_APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: home-where-to
+    commands:
+      - tapOn:
+          id: home-where-to
+- runFlow:
+    when:
+      notVisible:
+        id: search-input
+    commands:
+      - tapOn:
+          id: home-search-toggle
+- extendedWaitUntil:
+    visible:
+      id: search-input
+    timeout: 15000
