@@ -430,7 +430,7 @@ export function Customers() {
                 <td><Pill status={u.disabled ? 'cancelled' : 'completed'} label={u.disabled ? 'Deaktivert' : 'Aktiv'} /></td>
                 <td className="dim nowrap">{fmtDay(u.created_at)}</td>
                 <td className="right">
-                  {u.role === 'passenger' || !u.role || u.role === 'customer'
+                  {!u.role || ['user', 'customer', 'passenger'].includes(u.role)
                     ? <Btn variant={u.disabled ? 'sm' : 'danger'} disabled={busyUser === u.id} onClick={() => toggleUser(u)}>
                         {busyUser === u.id ? 'Lagrer…' : u.disabled ? 'Reaktiver' : 'Blokker'}
                       </Btn>
@@ -491,7 +491,7 @@ export function Vehicles() {
         <input className="input" placeholder="Søk skilt / modell / sjåfør…" value={qi} onChange={(e) => setQi(e.target.value)} />
         <select className="select" value={vt} onChange={(e) => setVt(e.target.value)}>
           <option value="">Alle klasser</option><option value="ai-first">SNAR</option>
-          <option value="enkelt">Enkel</option><option value="trygg">Komfort XL</option><option value="premium">Premium</option>
+          <option value="enkelt">Enkel</option><option value="trygg">Komfort XL</option><option value="premium">Premium</option><option value="suv">SUV</option>
         </select>
       </div>
       <ErrorBanner msg={err} />
@@ -927,7 +927,15 @@ export function Settings() {
 
   const setPrice = (key: string, value: any) => setPricing((p: any) => ({ ...p, [key]: value }));
   const setVehicleRate = (type: string, key: string, value: number) =>
-    setPricing((p: any) => ({ ...p, vehicle_rates: { ...(p.vehicle_rates || {}), [type]: { ...(p.vehicle_rates?.[type] || {}), [key]: value } } }));
+    setPricing((p: any) => {
+      const rates = p.vehicle_rates || {};
+      let previous = rates[type] || {};
+      if (type === 'suv' && !rates.suv && rates.trygg) {
+        const { base_fare, per_km, per_minute, minimum_fare } = rates.trygg;
+        previous = { base_fare, per_km, per_minute, minimum_fare };
+      }
+      return { ...p, vehicle_rates: { ...rates, [type]: { ...previous, [key]: value } } };
+    });
   const setArea = (id: string, patch: any) =>
     setPricing((p: any) => ({ ...p, areas: { ...(p.areas || {}), [id]: { ...(p.areas?.[id] || {}), ...patch } } }));
   const removeArea = (id: string) => setPricing((p: any) => {
@@ -1005,7 +1013,7 @@ export function Settings() {
     ['extra_stop_fee','Ekstra stopp'], ['customer_cancellation_fee','Avbestillingsgebyr kunde'],
     ['late_driver_cancellation_fee','Registrert gebyr ved sen sjåføravbestilling'],
   ];
-  const vehicleLabels: any = { 'ai-first': 'SNAR', enkelt: 'SNAR Sparsom', trygg: 'SNAR XL / Komfort', premium: 'SNAR Premium' };
+  const vehicleLabels: any = { 'ai-first': 'SNAR', enkelt: 'SNAR Sparsom', trygg: 'SNAR XL / Komfort', premium: 'SNAR Premium', suv: 'SNAR SUV' };
   const areas = Object.entries(pricing?.areas || {}) as [string, any][];
   const versions = history.data?.items || [];
   const checks = readiness.data?.checks || {};
@@ -1105,10 +1113,10 @@ export function Settings() {
       <Card>
         <p className="dim">Ventetid gjelder ved hentestedet fra registrert ankomst til turstart, etter gratisperioden. Kunden må bekrefte sats og maksimal kortreservasjon før bestilling. Ubrukt reservasjon frigjøres; ventetid får ikke toppristillegg. Eldre appversjoner uten bekreftelsen får ikke dette tillegget.</p>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
-          {['ai-first','enkelt','trygg','premium'].map((type) => {
+          {['ai-first','enkelt','trygg','premium','suv'].map((type) => {
             const rate = type === 'ai-first'
               ? { base_fare: pricing?.base_fare, per_km: pricing?.per_km, per_minute: pricing?.per_minute, minimum_fare: pricing?.minimum_fare }
-              : (pricing?.vehicle_rates?.[type] || {});
+              : (pricing?.vehicle_rates?.[type] || (type === 'suv' ? pricing?.vehicle_rates?.trygg : {}) || {});
             return <div key={type} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 14 }}>
               <div className="strong">{vehicleLabels[type]}</div>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 10 }}>
@@ -1159,7 +1167,7 @@ export function Settings() {
           <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
           <div className="field"><label className="label">Ventetid ved henting (min)</label><input className="input" type="number" min="0" max="1440" value={test.waiting_minutes} onChange={e=>setTest({...test,waiting_minutes:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
-            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option><option value="suv">SUV</option>
           </select></div>
           <Btn onClick={runTest}>Beregn</Btn>
         </div>
@@ -1170,7 +1178,7 @@ export function Settings() {
           <div className="field"><label className="label">Fra</label><input className="input" placeholder="Adresse / sted" value={routeTest.pickup_address} onChange={e=>setRouteTest({...routeTest,pickup_address:e.target.value})}/></div>
           <div className="field"><label className="label">Til</label><input className="input" placeholder="Adresse / sted" value={routeTest.dropoff_address} onChange={e=>setRouteTest({...routeTest,dropoff_address:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={routeTest.vehicle_type} onChange={e=>setRouteTest({...routeTest,vehicle_type:e.target.value})}>
-            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option><option value="suv">SUV</option>
           </select></div>
           <Btn onClick={runRouteTest}>Test rute</Btn>
         </div>
