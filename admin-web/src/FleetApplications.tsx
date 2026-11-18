@@ -164,7 +164,7 @@ export default function FleetApplications() {
     <>
       <PageHead
         title="Løyvehaversøknader"
-        sub="Dokumentkontroll og godkjenning før tilgang til fleet.snarapp.no"
+        sub="Dokumentkontroll og godkjenning før tilgang til SNAR Fleet"
         right={<Btn variant="sm" onClick={refresh}>Oppdater</Btn>}
       />
 
@@ -244,7 +244,7 @@ export default function FleetApplications() {
           {approvalResult ? <Card>
             <div className="section-title">Flåten er opprettet</div>
             <p>{approvalResult.confirmation_email_status === 'queued' ? 'Bekreftelsen er lagt i e-postkøen.' : 'E-post er ikke konfigurert. Bekreftelsen ligger i kø til tjenesten aktiveres.'}</p>
-            <p>Løyvehaveren logger inn på <a href="https://fleet.snarapp.no/login" target="_blank" rel="noreferrer">SNAR Fleet</a> med e-postadressen fra søknaden.</p>
+            <p>Løyvehaveren logger inn på <a href={(import.meta as any).env.VITE_FLEET_URL || 'https://fleet.snarapp.no/login'} target="_blank" rel="noreferrer">SNAR Fleet</a> med e-postadressen fra søknaden.</p>
             {approvalResult.temp_password ? <><p>Midlertidig passord vises bare nå. Løyvehaveren bør velge et nytt passord via engangslenken i bekreftelsesmailen.</p><input className="input" aria-label="Midlertidig passord til ny løyvehaver" type="password" value={approvalResult.temp_password} readOnly autoComplete="off"/><Btn variant="ghost" onClick={() => void navigator.clipboard?.writeText(approvalResult.temp_password)}>Kopier midlertidig passord</Btn></> : <p>Bruk eksisterende passord, eller velg Glemt passord når e-post er aktivert.</p>}
           </Card> : null}
 

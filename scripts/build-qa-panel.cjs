@@ -7,11 +7,9 @@ const panel = process.argv[2];
 if (!['admin-web', 'fleet-web', 'marketing-web'].includes(panel)) throw new Error('Expected a supported QA web app');
 const root = path.resolve(__dirname, '..');
 const cwd = path.join(root, panel);
-const env = { ...process.env, VITE_APP_ENV: 'qa', VITE_API_BASE: '/api', VITE_PUBLIC_SITE_URL: 'https://api-qa.snarapp.no/api/qa-site' };
+const env = { ...process.env, VITE_APP_ENV: 'qa', VITE_API_BASE: '/api', VITE_PUBLIC_SITE_URL: 'https://api-qa.snarapp.no/api/qa-site', VITE_FLEET_URL: 'https://api-qa.snarapp.no/api/qa-fleet/login' };
 if (panel === 'marketing-web') {
   env.VITE_API_BASE_URL = '/api';
-  env.VITE_PUBLIC_SITE_URL = 'https://api-qa.snarapp.no/api/qa-site';
-  env.VITE_FLEET_URL = 'https://api-qa.snarapp.no/api/qa-fleet/login';
   env.VITE_CONTACT_DOMAIN = 'snarapp.no';
 }
 execFileSync('npm', ['run', 'build'], { cwd, env, stdio: 'inherit' });
