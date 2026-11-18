@@ -502,6 +502,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   queryData.trips = { isError: true, data: undefined };
   tree = await mount(CustomerHistory); assert.match(text(tree), /Kunne ikke hente turhistorikken/); await unmount(tree);
   queryData.trips = { data: [] };
+  queryData['customer-active-trip'] = { data: null };
   tree = await mount(CustomerHistory); assert.match(text(tree), /Ingen turer ennå/); await unmount(tree);
 
   const {osloWeekStart,thisOsloWeek}=load('frontend','src/lib/osloCalendar.ts');

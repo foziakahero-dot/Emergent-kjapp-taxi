@@ -13,6 +13,7 @@ let shareLink = async () => ({url:'https://qa.example.invalid/tur/fixture'}), ai
 let ticket = async () => ({data:{ok:true,ticket_id:'fixture-ticket'}}), failStorage = false;
 let shareCalls = 0, pickupCalls = 0, ticketCalls = 0, aiCalls = 0, exportCalls = 0, nativeImports = 0;
 let user = {id:'fixture-customer',email:'qa@example.invalid',fullName:'QA Customer',legal_accepted:true}, backCalls = 0;
+let placeRecords = [], placeWrites = [];
 const navigations = [], cache = new Map(), stored = new Map();
 const colors = new Proxy({}, {get:()=>'#123456'});
 const stubs = {
@@ -40,6 +41,27 @@ stubs['react-native'].AppState={currentState:'active',addEventListener:()=>({rem
 stubs['react-native'].BackHandler={addEventListener:(_event,fn)=>{backHandler=fn;return {remove:noop};}};
 stubs['expo-router'].router={canGoBack:()=>hasHistory,back:()=>backCalls++,replace:value=>navigations.push(value)};
 stubs['expo-router'].useSegments=()=>['customer-data'];
+stubs['expo-router'].useFocusEffect=callback=>React.useEffect(callback,[callback]);
+Object.assign(stubs['react-native'], {StyleSheet:{absoluteFill:{}}, Keyboard: {dismiss:noop}});
+stubs['@/src/components/FigmaGradient']={FigmaGradient:host('FigmaGradient')};
+stubs['@/src/components/CustomerPhoto']={CustomerPhoto:host('CustomerPhoto')};
+stubs['@/src/components/V10Icon']={V10Icon:host('V10Icon')};
+stubs['@/src/lib/usePaymentPreference']={usePaymentPreference:()=>({choice:'cash'})};
+stubs['@/src/components/BookingPrimitives']={confirmedPaymentMethod:()=>null};
+Object.assign(stubs['@/src/components/V10UI'], {V10Badge: host('Badge')});
+Object.assign(stubs['@/src/lib/format'], {kr:n=>`${n} kr`,vehicleMeta:()=>({name:'SNAR'})});
+Object.assign(stubs['@/src/lib/api'], {
+ mePlacesApi:{
+  list:async()=>({places:placeRecords}),
+  add:async value=>{placeWrites.push(value);placeRecords=[...placeRecords,{...value,id:'fixture-favorite'}];},
+  update:async (id,value)=>{placeWrites.push({id,...value});placeRecords=placeRecords.map(place=>place.id===id?{...value,id}:place);},
+ },
+ placesApi:{search:async()=>({results:[{name:'Fixture address',lat:59.91,lng:10.75}]})},
+ paymentApi:{list:async()=>[]},
+});
+function saveFixtureLabel(label) {
+ stubs['expo-router'].useLocalSearchParams=()=>({label});
+}
 stubs['./snar10/Island']={Island:host('Island')};
 stubs['@/src/lib/tripPresence']={driverPresence:()=>({fresh:true})};
 stubs['@/src/components/FloatingTabBar']={FloatingTabBar:host('Dock'),TabBarVisibilityProvider:host('Visibility'),TabScene:host('Scene')};
@@ -140,4 +162,77 @@ test('Android back returns to the preceding settings screen before falling back 
  assert.equal(typeof backHandler,'function');
  hasHistory=true;await act(async()=>assert.equal(backHandler(),true));assert.equal(backCalls,oldBack+1);assert.equal(navigations.length,before);
  hasHistory=false;await act(async()=>assert.equal(backHandler(),true));assert.equal(navigations.at(-1),'/(app)/home');await page.close();
+});
+
+test('English account shortcuts use the canonical place key and open support chat',async()=>{
+ const Profile=load('app/(app)/profile.tsx').default;
+ placeRecords=[{id:'fixture-home',label:'Hjem',name:'Min adresse'}];
+ await act(async()=>language.saveCustomerLanguage('en'));
+ const page=await mount(Profile), {tree}=page;
+ const home=node(tree,'profile-place-home'), work=node(tree,'profile-place-work'), help=node(tree,'profile-ai-help');
+ assert.equal(home.props.title,'Home');
+ assert.equal(home.props.subtitle,'Min adresse');
+ assert.match(work.props.subtitle,/one tap/);
+ assert.equal(help.props.title,'AI support chat');
+ await act(async()=>{home.props.onPress();help.props.onPress();});
+ assert.deepEqual(JSON.parse(JSON.stringify(navigations.slice(-2))),[{pathname:'/saved-places',params:{label:'Hjem'}},'/support-chat']);
+ await page.close();
+});
+
+test('named favorites save once and an existing favorite can be edited',async()=>{
+ saveFixtureLabel(undefined);
+ const SavedPlaces=load('app/saved-places.tsx').default;
+ placeRecords=[];placeWrites=[];
+ const page=await mount(SavedPlaces), {tree}=page;
+ async function chooseAddress() {
+  await act(async()=>node(tree,'places-search-input').props.onChangeText('Fixture address'));
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,375)));
+  await act(async()=>node(tree,'places-result-0').props.onPress());
+ }
+ await act(async()=>node(tree,'places-add').props.onPress());
+ await chooseAddress();
+ await act(async()=>node(tree,'places-custom-name').props.onChangeText(' Hjem '));
+ assert.equal(node(tree,'places-save-favorite').props.disabled,true);
+ await act(async()=>node(tree,'places-custom-name').props.onChangeText(' Trening '));
+ await act(async()=>{const save=node(tree,'places-save-favorite').props.onPress;save();save();});
+ await act(wait);
+ assert.equal(placeWrites.length,1);
+ assert.equal(placeWrites[0].label,'Trening');
+ assert.ok(node(tree,'place-fixture-favorite'));
+ await act(async()=>node(tree,'place-edit-fixture-favorite').props.onPress());
+ await chooseAddress();
+ assert.equal(node(tree,'places-custom-name').props.value,'Trening');
+ await act(async()=>node(tree,'places-custom-name').props.onChangeText('Barnehage'));
+ await act(async()=>node(tree,'places-save-favorite').props.onPress());
+ assert.equal(placeWrites[1].id,'fixture-favorite');
+ assert.equal(placeWrites[1].label,'Barnehage');
+ await page.close();
+});
+
+test('Activity reconfirms a changed cancellation fee and sends one request',async()=>{
+ const History=load('app/(app)/history.tsx').default;
+ let fee=0, requests=0;
+ trips={...active(),driver_id:'fixture-driver',driver:{name:'Testsjåfør'},eta_min:3,eta_updated_at:new Date().toISOString()};
+ Object.assign(stubs['@/src/lib/api'].tripsApi, {
+  list:async()=>[],
+  cancelPreview:async()=>({cancellation_fee:fee,currency:'NOK'}),
+  cancel:async()=>{requests++;trips=null;return {ok:true};},
+ });
+ const page=await mount(History), {tree}=page;
+ assert.match(JSON.stringify(tree.toJSON()),/Testsjåfør/);
+ assert.match(JSON.stringify(tree.toJSON()),/Henting om ca\./);
+ await act(async()=>node(tree,'history-cancel-trip').props.onPress());
+ assert.equal(requests,0);
+ await act(async()=>node(tree,'history-cancel-keep').props.onPress());
+ assert.equal(node(tree,'history-cancel-confirm'),undefined);
+ await act(async()=>node(tree,'history-cancel-trip').props.onPress());
+ fee=42;
+ await act(async()=>node(tree,'history-cancel-confirm').props.onPress());
+ assert.match(text(tree),/42 kr/);
+ assert.equal(requests,0);
+ await act(async()=>{const confirm=node(tree,'history-cancel-confirm').props.onPress;confirm();confirm();});
+ await act(wait);
+ assert.equal(requests,1);
+ assert.equal(node(tree,'history-active-trip'),undefined);
+ await page.close();
 });
