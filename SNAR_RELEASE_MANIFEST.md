@@ -43,3 +43,7 @@ Dette er build-detalj-/installasjonsoversikter, ikke påståtte direkte APK/IPA-
 1. QA bruker Stripe TEST; live-belastning er ikke aktivert av arbeidet. QA/produksjon har separate godkjenninger.
 2. Ny runner krever separerte backend-/mobil-SHA-er, riktig prosjekt/profil og faktisk APK-checksum. Et ferdig bygg er ikke fysisk testet før installert build er kontrollert.
 3. Ingen produksjonsrollback er utført eller øvd i denne økten. Før QA-deploy registreres gjeldende Render-artifact og kompatibilitet; databaseendringer kan ikke rulles tilbake med et kode-deploy alene.
+
+## Siste oppfølging – gratis Community
+
+Gratis Community er valgt. Verifisert GitHub stable-release v4.0.1, publisert 16. november 2026; Docker Hub-image låst til sha256:aa6254657857973841f5ada454dca7f05d518f0c8a48ba73b056556fd4728343. Oppstartspakke ligger i integrations/budibase/selfhost. Ingen container/deploy/subscription installert. Portalinnlogging er bekreftet; dette erstatter tidligere historisk innloggingsblokkering. Cloud-tenantens reservasjon/aktivering er uavklart og videre Cloud-kjøp er ikke valgt.

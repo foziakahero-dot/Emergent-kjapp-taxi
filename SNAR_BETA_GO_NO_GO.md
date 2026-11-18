@@ -30,3 +30,7 @@
 Ingen slik overgang er utført. Det er ikke nødvendig å be om produksjonsgodkjenning mens kandidaten fortsatt er NO-GO.
 
 Oppfølging PostgreSQL/Budibase: 44 lokale kontraktkontroller består i en separat kandidat. Ingen verifisert Render PostgreSQL-instans eller innlogget Budibase-builder er tilgjengelig i denne økten. Ingen ny admin-app er deployet, og testene endrer ikke NO-GO-beslutningen for SNAR-beta.
+
+## Siste oppfølging – gratis Community
+
+Gratis Community-oppsett er forberedt, med totalt 48 lokale kontroller. Ingen Docker-vert er tilgjengelig og PostgreSQL-målet er ikke identifisert. Innlogget Cloud-portal er bekreftet, men ingen brukbar tenant eller Community-installasjon er verifisert. NO-GO for beta består.

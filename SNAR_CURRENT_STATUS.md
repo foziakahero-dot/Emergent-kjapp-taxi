@@ -60,3 +60,7 @@ Render-tilkoblingen er kontrollert på arbeidsområdenivå: ett tilgjengelig arb
 Etter brukerens eksplisitte innloggingstillatelse ble Google og konto valgt via sikker innlogging. Ved «Fortsett» stoppet nettleserens URL-policy overgangen. Et nytt forsøk ble avvist av automatisk sikkerhetskontroll som en alternativ nettleserflate rundt den samme sperren. Budibase-innlogging er **ukjent/ikke bekreftet**; ikke rapporter feil passord eller manglende konto.
 
 Separat kandidat ligger under `integrations/budibase`: additiv PostgreSQL-migrering, audit/versjonering, begrensede SQL-handlinger, JWT-verifiserende REST-adapter og OpenAPI 3.0-queryimport. Dette er ingen deployet Budibase-app. To reelle feil i første lokale kandidat ble gjenskapt og rettet: NULL-versjon som omgår konfliktkontroll, og manglende versjonsøkning ved andre SQL-skrivere. Se kandidatens test- og blokkeringsrapport. Eksisterende app-/backendkilde er ikke endret.
+
+## Siste oppfølging – gratis Community
+
+Budibase-innlogging er nå bekreftet via brukerens direkte HTTPS-portaladresse. Ingen tenant vises. Første godkjente opprettelsesforsøk gikk til abonnementsvalg; et senere forsøk sa at domenet snarnexorahub allerede eksisterer. Opprettelse/reservasjon er uavklart; ingen betalt plan er aktivert. Bruker har valgt gratis Community. Docker/Podman finnes ikke i arbeidsmiljøet, og ingen eksisterende vert er tilkoblet. Oppstartspakke med persistent volum og loopback-binding er klargjort i integrations/budibase/selfhost, men er ikke startet. PostgreSQL-målet er fortsatt ikke identifisert.

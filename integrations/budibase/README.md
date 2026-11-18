@@ -4,7 +4,9 @@
 
 Implementert og lokalt testet SQL og REST-adapter. **Ingen Budibase-app eller Render-database er opprettet, koblet til eller deployet.** SNARs verifiserte QA kjører fortsatt FastAPI/MongoDB og eksisterende Admin/Fleet-paneler.
 
-18. november 2026 viste Render-tilkoblingen ett arbeidsområde og ingen PostgreSQL-instanser. Budibase åpnet på innlogging. Brukeren valgte Google og konto gjennom sikker innlogging; etter «Fortsett» stoppet nettleserens URL-policy overgangen. Innloggingsresultatet er ukjent. Fullmakt endrer ikke denne tekniske sperren. Dette er ikke bevis på feil passord, manglende Budibase-konto eller feil i panelkoden.
+18. november 2026 viste Render-tilkoblingen ett arbeidsområde og ingen PostgreSQL-instanser. Budibase-innlogging er senere bekreftet gjennom brukerens oppgitte HTTPS-adresse `/portal/tenants`. Tidligere URL-policy-blokkeringer er historiske; ikke oppgi innlogging som siste blocker. Kontolisten viste ingen tenants. Etter brukerens godkjenning førte `Continue` for `snarnexorahub` til abonnementssiden. Ved ny kontroll var listen fortsatt tom, og et nytt forsøk meldte at domenet allerede eksisterer. Om domenet er reservert eller tenant er opprettet uten å være synlig/aktivert, er uavklart. Ingen plan er kjøpt eller aktivert.
+
+Bruker har nå valgt **gratis Community / self-hosted**. Oppstartspakken ligger i `selfhost/README.md`. Ingen Docker-/Podman-motor er tilgjengelig her, og ingen eksisterende vert er tilkoblet. Pakken er derfor klargjort og sikkerhetskontrollert, men ikke startet. Nyeste lokale verifikasjon er 19 SQL-tester pluss 29 Python-kontroller; ingen full installasjon eller UI-flyt er påstått bestått.
 
 Følgende må identifiseres før tilkobling: faktisk Budibase-arbeidsområde, eksisterende PostgreSQL-host/database og miljø, og støttet individuell innlogging. Ikke opprett en ny betalt database som erstatning for en ukjent eksisterende database.
 
@@ -83,7 +85,7 @@ Dette er bindingskontrakten for builderen. Den er ikke påstått importert eller
 ```bash
 npm ci
 npm test
-.venv/bin/python -m pytest -q tests/test_gateway.py tests/test_openapi.py
+.venv/bin/python -m pytest -q tests/test_gateway.py tests/test_openapi.py tests/test_selfhost.py
 .venv/bin/python export_openapi.py
 .venv/bin/python -c 'import json; from openapi_spec_validator import validate; validate(json.load(open("budibase-rest.openapi.json"))); print("OpenAPI PASS")'
 ```

@@ -1,0 +1,1 @@
+BLOCKED: Docker finnes ikke på denne maskinen. Installer/start en støttet Docker-motor først.
