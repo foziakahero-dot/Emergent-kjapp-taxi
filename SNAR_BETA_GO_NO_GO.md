@@ -28,3 +28,5 @@
 5. Første pilot har 10–20 navngitte inviterte testere og ansvarlige sjåfører. Live-betaling, masseinvitasjoner, offentlig distribusjon og produksjonspromotering krever fortsatt brukerens uttrykkelige godkjenning.
 
 Ingen slik overgang er utført. Det er ikke nødvendig å be om produksjonsgodkjenning mens kandidaten fortsatt er NO-GO.
+
+Oppfølging PostgreSQL/Budibase: 44 lokale kontraktkontroller består i en separat kandidat. Ingen verifisert Render PostgreSQL-instans eller innlogget Budibase-builder er tilgjengelig i denne økten. Ingen ny admin-app er deployet, og testene endrer ikke NO-GO-beslutningen for SNAR-beta.

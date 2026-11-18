@@ -52,3 +52,11 @@ Bruker har senere oppgitt et PostgreSQL/Budibase-oppsett med eget SQL-skjema. De
 - [PR150](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/150), [PR145](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/145), [PR149](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/149), [PR151](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/151).
 - `docs/qa/20261118/runtime-checks.json` og `financial-probe.json` inneholder faktiske, avgrensede observasjoner.
 - [GitHub CI-blokkering](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/actions/runs/44375318630).
+
+## 6. Oppfølging – PostgreSQL/Budibase
+
+Render-tilkoblingen er kontrollert på arbeidsområdenivå: ett tilgjengelig arbeidsområde (`tea-dassqnrbc2fs73a770i0`), ingen PostgreSQL-instanser. Dette avkrefter ikke at brukeren har en database i en annen konto eller hos en annen tilbyder; målhost og schema er fortsatt ikke identifisert. Ikke erstatt faktisk Mongo-QA med en ny database.
+
+Etter brukerens eksplisitte innloggingstillatelse ble Google og konto valgt via sikker innlogging. Ved «Fortsett» stoppet nettleserens URL-policy overgangen. Et nytt forsøk ble avvist av automatisk sikkerhetskontroll som en alternativ nettleserflate rundt den samme sperren. Budibase-innlogging er **ukjent/ikke bekreftet**; ikke rapporter feil passord eller manglende konto.
+
+Separat kandidat ligger under `integrations/budibase`: additiv PostgreSQL-migrering, audit/versjonering, begrensede SQL-handlinger, JWT-verifiserende REST-adapter og OpenAPI 3.0-queryimport. Dette er ingen deployet Budibase-app. To reelle feil i første lokale kandidat ble gjenskapt og rettet: NULL-versjon som omgår konfliktkontroll, og manglende versjonsøkning ved andre SQL-skrivere. Se kandidatens test- og blokkeringsrapport. Eksisterende app-/backendkilde er ikke endret.

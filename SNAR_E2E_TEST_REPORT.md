@@ -56,3 +56,7 @@ PR144 beskriver eldre Customer-/Driver-Maestro entry-smoke fra 5.–6. november.
 1. Fjernet tre uautentiserte HTTP-mutasjoner i den umergede kampanjegrenen. Interne Python-kall beholdes.
 2. Testadapteren bruker Mongo ID-/operator-/upsertsemantikk og Motor-lignende cursor; lazy-import-mocken peker til riktig modul. Telefonduplikat-testen kontrollerer verifisert eierskap.
 3. Ingen ny leverandørbetaling, SMS, e-post, databaseendring, kontoendring, produksjonsdeploy eller offentlig publisering er utført.
+
+## 5. PostgreSQL/Budibase – egne kontrakttester
+
+19 PostgreSQL-tester i isolert PGlite og 25 Python JWT-/HTTP-/OpenAPI-tester består. Før retting bestod 17/19 SQL-tester; NULL-versjonskontroll og endringer fra andre skrivere er rettet med eksplisitt validering og versjoneringstriggere. Logger ligger i `docs/qa/20261118/budibase`. Dette er **ikke mobil E2E eller Budibase browser PASS**: repository er simulert i API-testene, og virkelig Render-transport, innlogget builder, polling, MFA og parallelle workere er ikke kjørt. Se `integrations/budibase/VERIFICATION.md` for PASS/BLOCKED/NOT RUN.

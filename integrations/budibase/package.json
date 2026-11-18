@@ -1,0 +1,16 @@
+{
+  "name": "snar-budibase-contract-tests",
+  "version": "1.0.0",
+  "description": "Isolated PostgreSQL contract checks; never connects to deployed SNAR",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/database.test.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
+  }
+}

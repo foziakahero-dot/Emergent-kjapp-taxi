@@ -2,6 +2,8 @@
 
 Dette dokumenterer observerte kilder og arbeid; det erklærer ikke en produksjonsrelease.
 
+PostgreSQL/Budibase-oppfølging er isolert på `feature/budibase-postgres-admin-20261118`, med utgangspunkt i rapportkandidat `40df1609defadddf033ec4884331e4ea7556e2a8` (PR152). Kilde ligger i `integrations/budibase`, og loggene i `docs/qa/20261118/budibase`. Ingen SQL er kjørt mot ekstern database, ingen Budibase-app er publisert og ingen eksisterende backend-/mobildeploy er endret. Innloggingens siste tilstand er blokkert/ukjent som beskrevet i `VERIFICATION.md`.
+
 ## 1. Kilder og deploy
 
 | Komponent | SHA / identitet | Tilstand |
