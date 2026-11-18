@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test tests/fleet-applications.browser.test.mjs",
     "build": "vite build",
     "build:qa": "node ../scripts/build-qa-panel.cjs admin-web",
     "preview": "vite preview"
@@ -22,6 +23,7 @@
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "playwright": "1.65.1",
     "typescript": "^5.5.4",
     "vite": "^8.3.0"
   }

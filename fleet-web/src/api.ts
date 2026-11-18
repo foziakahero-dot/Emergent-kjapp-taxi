@@ -34,13 +34,20 @@ http.interceptors.request.use((cfg) => {
   return cfg;
 });
 
-let onUnauthorized: () => void = () => {};
-export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn; };
+type Denied = 401 | 403;
+let onUnauthorized: (status: Denied) => void = () => {};
+export const setUnauthorizedHandler = (fn: (status: Denied) => void) => { onUnauthorized = fn; };
+// These fleet-wide reads require access to the fleet itself. A forbidden
+// write or a forbidden individual driver/document is not a session revocation.
+const scopeReads = new Set(['/fleet/me', '/fleet/overview', '/fleet/trips', '/fleet/drivers', '/fleet/documents', '/fleet/live', '/fleet/payouts', '/fleet/stripe/status']);
 
 http.interceptors.response.use(
   (r) => r,
   (e) => {
-    if (e?.response?.status === 401) onUnauthorized();
+    const status = e?.response?.status;
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    const ownRequest = token && e?.config?.headers?.Authorization === `Bearer ${token}`;
+    if (ownRequest && (status === 401 || (status === 403 && e.config.method === 'get' && scopeReads.has(e.config.url)))) onUnauthorized(status);
     return Promise.reject(e);
   },
 );

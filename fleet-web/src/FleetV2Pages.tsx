@@ -14,6 +14,9 @@ import {
   FleetVehicle,
 } from './api';
 import { FleetMap } from './FleetMap';
+import { PayoutCard } from './PayoutCard';
+import { ResourceNotice, useDashboardResource, type DashboardResource } from './useDashboardResource';
+import { readList, readStripeReady } from './dashboardResource';
 
 const money = (value: unknown) => `${new Intl.NumberFormat('nb-NO').format(Math.round(Number(value) || 0))} kr`;
 const shortDate = (value?: string) => value ? new Date(value).toLocaleDateString('nb-NO', { day: '2-digit', month: 'short' }) : '—';
@@ -61,8 +64,13 @@ function PageChrome({ title, sub, children, actions }: { title: string; sub: str
   </div>;
 }
 
-function DashboardAlerts({ docs, pendingDrivers, stripeReady }: { docs: FleetDocument[]; pendingDrivers: number; stripeReady: boolean | null }) {
-  const expiring = docs.filter((doc) => ['EXPIRING', 'EXPIRED'].includes(doc.compliance)).length;
+function DashboardAlerts({ docs, drivers, stripe }: {
+  docs: DashboardResource<FleetDocument[]>; drivers: DashboardResource<FleetDriver[]>; stripe: DashboardResource<boolean>;
+}) {
+  const expiring = docs.data?.filter(doc => ['EXPIRING', 'EXPIRED'].includes(doc.compliance)).length;
+  const pendingDrivers = drivers.data?.filter(driver => !driver.approved || driver.fleet_active === false).length;
+  const stripeReady = stripe.data;
+  const confirmed = [docs, drivers, stripe].every(source => source.status === 'ready');
   const items = [
     expiring ? { icon: '!', title: `${expiring} dokument${expiring === 1 ? '' : 'er'} krever oppfølging`, sub: 'Se dokumentoversikten', to: '/dokumenter', tone: 'red' } : null,
     pendingDrivers ? { icon: '↗', title: `${pendingDrivers} sjåfør${pendingDrivers === 1 ? '' : 'er'} venter oppfølging`, sub: 'Åpne sjåføroversikten', to: '/sjaforer', tone: 'amber' } : null,
@@ -73,89 +81,93 @@ function DashboardAlerts({ docs, pendingDrivers, stripeReady }: { docs: FleetDoc
     <SectionTitle title="Viktige varsler" sub="Det som trenger oppmerksomhet nå" />
     {items.length ? <div className="v2-alert-list">{items.map((item) => <Link key={item.title} to={item.to} className="v2-alert-row">
       <span className={`v2-alert-icon ${item.tone}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.sub}</small></span><b>›</b>
-    </Link>)}</div> : <div className="v2-empty-good"><span>✓</span><div><strong>Alt ser bra ut</strong><small>Ingen kritiske varsler akkurat nå.</small></div></div>}
+    </Link>)}</div> : confirmed ? <div className="v2-empty-good"><span>✓</span><div><strong>Alt ser bra ut</strong><small>Ingen kritiske varsler akkurat nå.</small></div></div> : null}
+    <ResourceNotice label="Dokumentvarsler" resource={docs} />
+    <ResourceNotice label="Sjåførvarsler" resource={drivers} />
+    <ResourceNotice label="Betalingsoppsett" resource={stripe} />
   </div>;
 }
 
+async function loadOverview() {
+  const value = await api.overview();
+  if (![value?.week?.gross, value?.week?.trips, value?.drivers_total].every(Number.isFinite)) throw Error('Ugyldige nøkkeltall');
+  return value;
+}
+const loadLiveDrivers = async () => readList(await api.live(), 'drivers');
+const loadTrips = async () => readList(await api.trips(45), 'trips');
+const loadDrivers = async () => readList(await api.drivers(), 'drivers');
+const loadDocs = async () => {
+  const docs = readList(await api.documents(), 'documents');
+  if (docs.some(doc => !doc.compliance)) throw Error('Ukjent dokumentstatus');
+  return docs;
+};
+const loadStripe = async () => readStripeReady(await api.stripeStatus());
+
 export function OperationsDashboardPage() {
-  const [overview, setOverview] = useState<FleetOverview | null>(null);
-  const [live, setLive] = useState<FleetLive | null>(null);
-  const [trips, setTrips] = useState<FleetTrip[]>([]);
-  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
-  const [documents, setDocuments] = useState<FleetDocument[]>([]);
-  const [payouts, setPayouts] = useState<any[]>([]);
-  const [stripeReady, setStripeReady] = useState<boolean | null>(null);
-  const [error, setError] = useState('');
+  const overview = useDashboardResource(loadOverview);
+  const live = useDashboardResource(loadLiveDrivers, 5_000);
+  const trips = useDashboardResource(loadTrips);
+  const drivers = useDashboardResource(loadDrivers);
+  const documents = useDashboardResource(loadDocs);
+  const stripe = useDashboardResource(loadStripe);
   const [range, setRange] = useState<'week'|'month'>('week');
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const [ov, lv, tr, dr, docs, pay, stripe] = await Promise.all([
-          api.overview(),
-          api.live(),
-          api.trips(45).catch(() => ({ trips: [] as FleetTrip[] })),
-          api.drivers().catch(() => ({ drivers: [] as FleetDriver[] })),
-          api.documents().catch(() => ({ documents: [] as FleetDocument[] } as any)),
-          api.payouts().catch(() => ({ payouts: [] as any[] })),
-          api.stripeStatus().catch(() => null),
-        ]);
-        if (!alive) return;
-        setOverview(ov); setLive(lv); setTrips(tr.trips || []); setDrivers(dr.drivers || []); setDocuments(docs.documents || []); setPayouts(pay.payouts || []);
-        setStripeReady(stripe ? Boolean((stripe as any).ready) : null);
-        setError('');
-      } catch (e) { if (alive) setError(apiError(e)); }
-    };
-    void load();
-    const liveTimer = window.setInterval(() => api.live().then((value) => alive && setLive(value)).catch(() => {}), 5000);
-    const dataTimer = window.setInterval(() => void load(), 30000);
-    return () => { alive = false; window.clearInterval(liveTimer); window.clearInterval(dataTimer); };
-  }, []);
-
-  if (!overview && !error) return <div className="v2-loading"><span /></div>;
-  if (!overview) return <div className="v2-error">{error || 'Kunne ikke laste Fleet-data.'}</div>;
 
   const now = new Date();
   const weekStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const periodTrips = trips.filter((trip) => {
+  const periodTrips = trips.data?.filter((trip) => {
     const date = tripDate(trip);
     if (!date || Number.isNaN(date.getTime())) return false;
     return range === 'week'
       ? date.getTime() >= weekStart
       : date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
   });
-  const paidPeriodTrips = periodTrips.filter(isPaidTrip);
-  const periodGross = range === 'week' ? overview.week.gross : paidPeriodTrips.reduce((sum, trip) => sum + Number(trip.price || 0), 0);
-  const periodTripCount = range === 'week' ? overview.week.trips : periodTrips.length;
-  const liveDrivers = live?.drivers || [];
-  const online = liveDrivers.filter((driver) => driver.online).length;
-  const active = liveDrivers.filter((driver) => ['driver_on_way', 'at_pickup', 'in_trip'].includes(driver.operational_status || '')).length;
-  const pendingDrivers = drivers.filter((driver) => !driver.approved || driver.fleet_active === false).length;
-  const nextPayout = payouts.find((payout) => !['paid', 'completed'].includes(String(payout.status || '').toLowerCase())) || payouts[0];
-  const recentTrips = [...trips].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 5);
-  const paidToday = trips.filter((trip) => isPaidTrip(trip) && trip.created_at && new Date(trip.created_at).toDateString() === now.toDateString());
-  const revenueSeries = paidPeriodTrips.slice(0, 14).reverse().map((trip) => Number(trip.price || 0));
+  const paidPeriodTrips = periodTrips?.filter(isPaidTrip);
+  const periodGross = range === 'week' ? overview.data?.week.gross : paidPeriodTrips?.reduce((sum, trip) => sum + Number(trip.price || 0), 0);
+  const grossLabel = periodGross === undefined ? '—' : money(periodGross);
+  const periodTripCount = range === 'week' ? overview.data?.week.trips : periodTrips?.length;
+  const periodSource = range === 'week' ? overview : trips;
+  const periodNotice = <ResourceNotice label={range === 'week' ? 'Nøkkeltall' : 'Turer'} resource={periodSource} />;
+  const liveDrivers = live.data;
+  const online = liveDrivers?.filter(driver => driver.online).length;
+  const active = liveDrivers?.filter(driver => ['driver_on_way', 'at_pickup', 'in_trip'].includes(driver.operational_status || '')).length;
+  const liveNotice = <ResourceNotice label="Live flåte" resource={live} />;
+  const tripsNotice = <ResourceNotice label="Turer" resource={trips} />;
+  const recentTrips = trips.data?.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 5);
+  const paidToday = trips.data?.filter(trip => isPaidTrip(trip) && trip.created_at && new Date(trip.created_at).toDateString() === now.toDateString());
+  const revenueSeries = paidPeriodTrips?.slice(0, 14).reverse().map(trip => Number(trip.price || 0));
 
   return <PageChrome title="Oversikt" sub="Sanntid og nøkkeltall for din flåte." actions={<select className="v2-select" value={range} onChange={(event) => setRange(event.target.value as 'week'|'month')}><option value="week">Denne uken</option><option value="month">Denne måneden</option></select>}>
     <div className="v2-kpi-grid">
-      <div className="v2-kpi"><span className="v2-kpi-icon green">↗</span><div><small>Omsetning</small><strong>{money(periodGross)}</strong><em>{periodTripCount} turer i perioden</em></div></div>
-      <div className="v2-kpi"><span className="v2-kpi-icon blue">⌁</span><div><small>Antall turer</small><strong>{periodTripCount}</strong><em>{paidToday.length} betalte i dag</em></div></div>
-      <div className="v2-kpi"><span className="v2-kpi-icon violet">●</span><div><small>Aktive sjåfører</small><strong>{online} / {overview.drivers_total}</strong><em>{active} på aktiv tur</em></div></div>
-      <div className="v2-kpi"><span className="v2-kpi-icon red">▣</span><div><small>Neste utbetaling</small><strong>{nextPayout ? money(nextPayout.net ?? nextPayout.amount) : '—'}</strong><em>{nextPayout?.arrival_date ? fullDate(nextPayout.arrival_date) : nextPayout?.status || 'Ingen planlagt payout'}</em></div></div>
+      <div className="v2-kpi"><span className="v2-kpi-icon green">↗</span><div><small>Omsetning</small><strong>{grossLabel}</strong>{periodTripCount !== undefined && <em>{periodTripCount} turer i perioden</em>}{periodNotice}</div></div>
+      <div className="v2-kpi"><span className="v2-kpi-icon blue">⌁</span><div><small>Antall turer</small><strong>{periodTripCount ?? '—'}</strong>{paidToday && <em>{paidToday.length} betalte i dag</em>}{periodNotice}{range === 'week' && tripsNotice}</div></div>
+      <div className="v2-kpi"><span className="v2-kpi-icon violet">●</span><div><small>Aktive sjåfører</small><strong>{online ?? '—'} / {overview.data?.drivers_total ?? '—'}</strong>{active !== undefined && <em>{active} på aktiv tur</em>}{liveNotice}<ResourceNotice label="Nøkkeltall" resource={overview} /></div></div>
+      <PayoutCard />
     </div>
 
     <div className="v2-dashboard-grid">
-      <div className="v2-card v2-map-card"><SectionTitle title="Live flåte – Oslo" sub={`${online} online · ${active} på tur`} action={<Link className="v2-link-button" to="/live">Se alle</Link>} /><div className="v2-map-wrap"><FleetMap drivers={liveDrivers} /></div><div className="v2-map-filters"><StatusPill tone="neutral">Alle {liveDrivers.length}</StatusPill><StatusPill tone="green">Online {online}</StatusPill><StatusPill tone="blue">På tur {active}</StatusPill><StatusPill tone="red">Offline {Math.max(0, overview.drivers_total - online)}</StatusPill></div></div>
-      <div className="v2-card v2-driver-status-card"><SectionTitle title="Sjåførstatus" sub="Direkte fra Fleet Live" action={<Link className="v2-link-button" to="/sjaforer">Se alle</Link>} /><div className="v2-driver-status-list">{liveDrivers.slice(0, 6).map((driver) => <Link key={driver.id} className="v2-driver-status-row" to={`/sjaforer/${driver.id}`}><Avatar name={driver.name || driver.email || 'Sjåfør'} online={Boolean(driver.online)} /><span><strong>{driver.name || driver.email || 'Sjåfør'}</strong><small>{driver.car || 'Bil ikke registrert'}{driver.plate ? ` · ${driver.plate}` : ''}</small></span><StatusPill tone={driver.online ? 'green' : 'red'}>{driver.online ? (driver.operational_status === 'available' ? 'Online' : 'Opptatt') : 'Offline'}</StatusPill></Link>)}</div></div>
+      <div className="v2-card v2-map-card">
+        <SectionTitle title="Live flåte – Oslo" sub={liveDrivers && `${online} online · ${active} på tur`} action={<Link className="v2-link-button" to="/live">Se alle</Link>} />
+        {liveNotice}
+        {liveDrivers && <><div className="v2-map-wrap"><FleetMap drivers={liveDrivers} /></div><div className="v2-map-filters"><StatusPill tone="neutral">Alle {liveDrivers.length}</StatusPill><StatusPill tone="green">Online {online}</StatusPill><StatusPill tone="blue">På tur {active}</StatusPill><StatusPill tone="red">Offline {liveDrivers.filter(driver => !driver.online).length}</StatusPill></div></>}
+      </div>
+      <div className="v2-card v2-driver-status-card">
+        <SectionTitle title="Sjåførstatus" sub="Direkte fra Fleet Live" action={<Link className="v2-link-button" to="/sjaforer">Se alle</Link>} />
+        {liveNotice}
+        <div className="v2-driver-status-list">{liveDrivers?.slice(0, 6).map((driver) => <Link key={driver.id} className="v2-driver-status-row" to={`/sjaforer/${driver.id}`}><Avatar name={driver.name || driver.email || 'Sjåfør'} online={Boolean(driver.online)} /><span><strong>{driver.name || driver.email || 'Sjåfør'}</strong><small>{driver.car || 'Bil ikke registrert'}{driver.plate ? ` · ${driver.plate}` : ''}</small></span><StatusPill tone={driver.online ? 'green' : 'red'}>{driver.online ? (driver.operational_status === 'available' ? 'Online' : 'Opptatt') : 'Offline'}</StatusPill></Link>)}</div>
+        {live.status === 'ready' && liveDrivers?.length === 0 && <div className="v2-empty-row">Ingen sjåfører i flåten.</div>}
+      </div>
     </div>
 
     <div className="v2-bottom-grid">
-      <div className="v2-card v2-chart-card"><SectionTitle title="Omsetning" sub={range === 'week' ? 'Denne uken' : 'Denne måneden'} /><strong className="v2-big-money">{money(periodGross)}</strong><MiniBars values={revenueSeries.length ? revenueSeries : [0, 0, 0, 0, 0, 0, 0]} /></div>
-      <div className="v2-card v2-table-card"><SectionTitle title="Siste turer" sub="Betaling og status" action={<Link className="v2-link-button" to="/turer">Se alle</Link>} /><div className="v2-compact-table">{recentTrips.map((trip) => { const state = paymentState(trip); return <div className="v2-trip-row" key={trip.trip_id}><span><strong>{trip.driver_name || 'Sjåfør'}</strong><small>{trip.pickup_address || 'Hentested'} → {trip.dropoff_address || 'Destinasjon'}</small></span><b>{money(trip.price)}</b><StatusPill tone={state.tone}>{state.label}</StatusPill></div>; })}{!recentTrips.length ? <div className="v2-empty-row">Ingen turer i perioden.</div> : null}</div></div>
-      <DashboardAlerts docs={documents} pendingDrivers={pendingDrivers} stripeReady={stripeReady} />
+      <div className="v2-card v2-chart-card"><SectionTitle title="Omsetning" sub={range === 'week' ? 'Denne uken' : 'Denne måneden'} />
+        <strong className="v2-big-money">{grossLabel}</strong>{periodNotice}{range === 'week' && tripsNotice}
+        {revenueSeries?.length ? <MiniBars values={revenueSeries} /> : trips.status === 'ready' && <div className="v2-empty-row">Ingen betalte turer i perioden.</div>}
+      </div>
+      <div className="v2-card v2-table-card"><SectionTitle title="Siste turer" sub="Betaling og status" action={<Link className="v2-link-button" to="/turer">Se alle</Link>} />
+        {tripsNotice}<div className="v2-compact-table">{recentTrips?.map((trip) => { const state = paymentState(trip); return <div className="v2-trip-row" key={trip.trip_id}><span><strong>{trip.driver_name || 'Sjåfør'}</strong><small>{trip.pickup_address || 'Hentested'} → {trip.dropoff_address || 'Destinasjon'}</small></span><b>{trip.price == null ? '—' : money(trip.price)}</b><StatusPill tone={state.tone}>{state.label}</StatusPill></div>; })}{trips.status === 'ready' && recentTrips?.length === 0 && <div className="v2-empty-row">Ingen turer i perioden.</div>}</div>
+      </div>
+      <DashboardAlerts docs={documents} drivers={drivers} stripe={stripe} />
     </div>
-    {error ? <div className="v2-inline-error">{error}</div> : null}
   </PageChrome>;
 }
 
