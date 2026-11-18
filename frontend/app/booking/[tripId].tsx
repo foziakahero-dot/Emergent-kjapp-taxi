@@ -4,6 +4,7 @@ import { useDriverAcceptedAlert } from '@/src/lib/useDriverAcceptedAlert';
 import { storage } from '@/src/utils/storage';
 import { DriverSearchOverlay } from '@/src/components/DriverSearchOverlay';
 import { destinationProximity, driverPresence } from '@/src/lib/tripPresence';
+import { cancellationFee, cancellationTerms, cancelledTrip, CUSTOMER_CANCELLABLE_STATUSES } from '@/src/lib/customerCancellation';
 import { BlurTargetView } from 'expo-blur';
 import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
@@ -170,12 +171,10 @@ export default function BookingFlow() {
     if (cancelPhase.current !== 'idle') return;
     cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');
     try {
-      const preview = await tripsApi.cancelPreview(tripId!);
+      const fee = await cancellationFee(tripId!);
       if (!routeIsCurrent()) return;
-      const fee = Number(preview?.cancellation_fee ?? 0);
-      if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilkår.');
       cancelPhase.current = 'confirm';
-      Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.', [
+      Alert.alert('Avbestille tur?', cancellationTerms(fee), [
         { text: 'Behold tur', style: 'cancel', onPress: releaseCancel },
         { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
           if (!routeIsCurrent() || cancelPhase.current !== 'confirm') return;
@@ -190,7 +189,7 @@ export default function BookingFlow() {
             // A response can be lost after the server commits cancellation.
             try {
               const canonical = await tripsApi.get(tripId!);
-              if (['cancelled', 'cancelled_by_driver'].includes(canonical?.status)) {
+              if (cancelledTrip(canonical?.status)) {
                 router.replace('/(app)/home'); return;
               }
             } catch {}
@@ -311,10 +310,10 @@ export default function BookingFlow() {
   const route = trip.status === 'driver_on_way' ? (!networkIssue && driverPresence(trip).fresh ? trip.driver_pickup_geometry?.coordinates || null : null) : trip.status === 'in_trip' ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
-  const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
+  const isFinal = cancelledTrip(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
-  const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
+  const canCancel = CUSTOMER_CANCELLABLE_STATUSES.includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = trip.eta_min;
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;

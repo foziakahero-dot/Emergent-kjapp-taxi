@@ -28,17 +28,17 @@ export default function Profile() {
       <CustomerPhoto initials={initials} size={72} shape="v10" showLabel={false} />
       <View style={{ flex: 1 }}><Text style={v10.title}>{user?.fullName || 'SNAR-bruker'}</Text><Text style={v10.secondary}>{[user?.phone, user?.email].filter(Boolean).join(' · ')}</Text></View>
     </View>
-    <V10Section title={t("Steder")}><V10Group>{[[t("Hjem"), 'home'], [t("Jobb"), 'work']].map(([label, icon], index) => {
+    <V10Section title={t('Steder')}><V10Group>{([['Hjem', 'home', 'Lagre hjemadressen for å velge den med ett trykk.'], ['Jobb', 'work', 'Lagre jobbadressen for å velge den med ett trykk.']] as const).map(([label, icon, hint], index) => {
       const place = records.find((item: any) => item.label === label);
-      return <V10Row key={label} border={index > 0} icon={icon} title={t(label)} subtitle={places.isPending ? t("Henter sted…") : places.isError ? t("Kunne ikke hente stedet") : place?.name || t("Legg til adresse")} onPress={() => router.push(`/saved-places?label=${encodeURIComponent(label)}` as any)} testID={`profile-place-${label === t("Hjem") ? 'home' : 'work'}`} />;
-    })}</V10Group></V10Section>
+      return <V10Row key={label} border={index > 0} icon={icon} title={t(label)} subtitle={places.isPending ? t('Henter sted…') : places.isError ? t('Kunne ikke hente stedet') : place?.name || t(hint)} onPress={() => router.push({ pathname: '/saved-places', params: { label } })} testID={`profile-place-${icon}`} />;
+    })}<V10Row border icon="destination" title={t('Favorittadresser')} subtitle={t('Lagre andre steder du reiser til ofte.')} onPress={() => router.push('/saved-places')} testID="profile-favorite-places" /></V10Group></V10Section>
     <V10Section title={t("Konto")}><V10Group>
       <V10Row icon={preference.choice === 'cash' ? 'cash' : 'payment'} title={t("Betaling")} subtitle={preference.choice === 'cash' ? t("Kontant · foretrukket betalingsmåte") : methods.isPending ? t("Henter betalingsmåter…") : methods.isError ? t("Åpne for å hente betalingsmåter") : primary ? paymentLabel(primary) : t("Kort eller kontant · velg betalingsmåte")} onPress={() => router.push('/payment-methods')} testID="profile-payments" />
       <V10Row border icon="access" title={t("Tilgjengelighet")} onPress={() => router.push('/customer-accessibility')} testID="profile-accessibility" />
       <V10Row border icon="settings" title={t("Innstillinger")} onPress={() => router.push('/settings')} testID="profile-settings" />
       <V10Row border icon="help" title={t("Support")} onPress={() => router.push('/support')} testID="profile-help" />
       <V10Row border icon="message" title={t("Meldinger")} onPress={() => router.push('/(app)/messages')} testID="profile-messages" />
-      <V10Row border icon="ai" title={t("AI-hjelp")} onPress={() => router.push('/(app)/assist')} testID="profile-ai-help" />
+      <V10Row border icon="ai" title={t('AI-chat for hjelp')} onPress={() => router.push('/support-chat')} testID="profile-ai-help" />
     </V10Group></V10Section>
   </V10Entrance></V10Screen>;
 }
