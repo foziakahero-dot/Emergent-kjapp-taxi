@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { FLEET_URL } from "./siteConfig";
 
 /** Customer BrandBadge: same glyph, radius and gradient. */
 export function SnarMark({ size = 40 }: { size?: number }) {
@@ -175,7 +176,7 @@ export function Footer() {
         <Link to="/#vehicles">Bilvalg</Link>
         <Link to="/loyvehaver">Løyvehavere</Link>
         <Link to="/help">Hjelp</Link>
-        <a href="https://fleet.snarapp.no/login">Fleet Panel</a>
+        <a href={FLEET_URL}>Fleet Panel</a>
       </nav>
       <div className="snar-contacts">
         {contacts.map(([label, name]) => (
