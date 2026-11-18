@@ -40,131 +40,68 @@ from founding_500 import (
 )
 
 
+class AsyncCursor:
+    """Match Motor's synchronous cursor construction and asynchronous reads."""
+    def __init__(self, raw):
+        self.raw = raw
+
+    def sort(self, *args):
+        self.raw = self.raw.sort(*args)
+        return self
+
+    def skip(self, value):
+        self.raw = self.raw.skip(value)
+        return self
+
+    def limit(self, value):
+        self.raw = self.raw.limit(value)
+        return self
+
+    async def to_list(self, length=None):
+        values = list(self.raw)
+        return values if length is None else values[:length]
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.raw)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
 class FakeCollection:
-    """Simple in-memory MongoDB-like collection for testing."""
+    """Isolated Mongo semantics: real IDs, operators, upserts and cursor shape."""
     def __init__(self):
-        self.docs = {}
+        import mongomock
+        self.raw = mongomock.MongoClient(tz_aware=True).db.collection
         self.indexes = []
 
     async def create_index(self, *args, **kwargs):
         self.indexes.append((args, kwargs))
+        return self.raw.create_index(*args, **kwargs)
 
-    async def find_one(self, query, projection=None):
-        for doc in self.docs.values():
-            if self._match(doc, query):
-                if projection:
-                    return {k: v for k, v in doc.items() if k in projection or projection.get(k, 0) == 1}
-                return doc
-        return None
+    async def find_one(self, *args, **kwargs):
+        return self.raw.find_one(*args, **kwargs)
 
-    async def find(self, query=None, projection=None, sort=None, skip=0, limit=0):
-        query = query or {}
-        results = [doc for doc in self.docs.values() if self._match(doc, query)]
-        if sort:
-            # Simple sort - not full implementation
-            pass
-        if skip:
-            results = results[skip:]
-        if limit:
-            results = results[:limit]
-        if projection:
-            results = [{k: v for k, v in doc.items() if k in projection or projection.get(k, 0) == 1} for doc in results]
-        for doc in results:
-            yield doc
+    def find(self, *args, **kwargs):
+        return AsyncCursor(self.raw.find(*args, **kwargs))
 
-    async def count_documents(self, query):
-        return sum(1 for doc in self.docs.values() if self._match(doc, query))
+    async def count_documents(self, *args, **kwargs):
+        return self.raw.count_documents(*args, **kwargs)
 
-    async def insert_one(self, doc):
-        key = doc.get("registration_id") or doc.get("invitation_id") or doc.get("challenge_id") or doc.get("identity_key") or str(ObjectId())
-        if key in self.docs:
-            from pymongo.errors import DuplicateKeyError
-            raise DuplicateKeyError("duplicate key")
-        self.docs[key] = doc
-        return MagicMock(inserted_id=key)
+    async def insert_one(self, *args, **kwargs):
+        return self.raw.insert_one(*args, **kwargs)
 
-    async def update_one(self, query, update, upsert=False):
-        matched = 0
-        for key, doc in self.docs.items():
-            if self._match(doc, query):
-                if "$set" in update:
-                    doc.update(update["$set"])
-                if "$setOnInsert" in update:
-                    for k, v in update["$setOnInsert"].items():
-                        if k not in doc:
-                            doc[k] = v
-                if "$inc" in update:
-                    for k, v in update["$inc"].items():
-                        doc[k] = doc.get(k, 0) + v
-                if "$unset" in update:
-                    for k in update["$unset"]:
-                        doc.pop(k, None)
-                matched += 1
-                break
-        if matched == 0 and upsert:
-            new_doc = {}
-            if "$setOnInsert" in update:
-                new_doc.update(update["$setOnInsert"])
-            if "$set" in update:
-                new_doc.update(update["$set"])
-            key = new_doc.get("registration_id") or new_doc.get("invitation_id") or new_doc.get("challenge_id") or new_doc.get("identity_key") or new_doc.get("_id") or str(ObjectId())
-            self.docs[key] = new_doc
-            return MagicMock(matched_count=0, modified_count=0, upserted_id=key)
-        return MagicMock(matched_count=matched, modified_count=matched)
+    async def update_one(self, *args, **kwargs):
+        return self.raw.update_one(*args, **kwargs)
 
-    async def find_one_and_update(self, query, update, upsert=False, return_document=None):
-        for key, doc in self.docs.items():
-            if self._match(doc, query):
-                if "$set" in update:
-                    doc.update(update["$set"])
-                if "$inc" in update:
-                    for k, v in update["$inc"].items():
-                        doc[k] = doc.get(k, 0) + v
-                if "$unset" in update:
-                    for k in update["$unset"]:
-                        doc.pop(k, None)
-                matched = 1
-                break
-        if return_document == ReturnDocument.AFTER:
-            return doc
-        return MagicMock(matched_count=matched if 'matched' in locals() else 0, modified_count=matched if 'matched' in locals() else 0)
+    async def find_one_and_update(self, *args, **kwargs):
+        return self.raw.find_one_and_update(*args, **kwargs)
 
-    async def aggregate(self, pipeline):
-        # Simple aggregation for budget calculation
-        if len(pipeline) == 2 and pipeline[0].get("$match", {}).get("status") == "completed":
-            total = 0
-            for doc in self.docs.values():
-                if doc.get("status") == "completed":
-                    total += doc.get("amount_ore", 0)
-            return [{"total": total}]
-        return []
-
-    def _match(self, doc, query):
-        for k, v in query.items():
-            if k == "_id":
-                continue
-            if isinstance(v, dict):
-                for op, op_val in v.items():
-                    if op == "$in":
-                        if doc.get(k) not in op_val:
-                            return False
-                    elif op == "$ne":
-                        if doc.get(k) == op_val:
-                            return False
-                    elif op == "$gt":
-                        if doc.get(k, 0) <= op_val:
-                            return False
-                    elif op == "$lte":
-                        if doc.get(k, "") > op_val:
-                            return False
-                    elif op == "$exists":
-                        if op_val and k not in doc:
-                            return False
-                        if not op_val and k in doc:
-                            return False
-            elif doc.get(k) != v:
-                return False
-        return True
+    def aggregate(self, *args, **kwargs):
+        return AsyncCursor(self.raw.aggregate(*args, **kwargs))
 
 
 class FakeDB:
@@ -369,10 +306,14 @@ class TestCreateRegistration:
             "kill_switch": False,
         })
 
-        # First registration succeeds
-        await create_registration_from_waitlist(db, identity_key1)
+        # A phone becomes exclusive once ownership has been verified.
+        first = await create_registration_from_waitlist(db, identity_key1)
+        await db[COLLECTION_CAMPAIGN_REGISTRATIONS].update_one(
+            {"registration_id": first.registration_id},
+            {"$set": {"status": "verified"}},
+        )
 
-        # Second should fail
+        # A second identity cannot reuse that verified phone.
         with pytest.raises(Exception) as exc:
             await create_registration_from_waitlist(db, identity_key2)
         assert "allerede registrert" in str(exc.value) or "409" in str(exc.value)
@@ -932,7 +873,7 @@ class TestLinkCustomer:
         })
 
         # Mock qualify_customer
-        with patch("founding_500.qualify_customer", new_callable=AsyncMock) as mock_qualify:
+        with patch("beta_campaign.qualify_customer", new_callable=AsyncMock) as mock_qualify:
             mock_qualify.return_value = MagicMock(customer_id=customer_id, qualified=True)
 
             result = await link_customer_account(db, registration.registration_id, customer_id)
