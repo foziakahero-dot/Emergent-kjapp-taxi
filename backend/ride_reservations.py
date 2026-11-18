@@ -9,6 +9,10 @@ from promo_credits import platform_fee_ore
 from fastapi import HTTPException
 from cash_payments import is_cash
 from payment_modes import customer_for_user, method_scope, is_live, payment_config, stripe_client
+from business_payment import business_card
+from vipps_payment import VippsReservations
+
+STRIPE_WALLETS = {"google_pay", "apple_pay"}
 
 
 def value(obj, key, default=None):
@@ -20,10 +24,11 @@ def stripe_id(obj):
 
 
 class RideReservations:
-    def __init__(self, db, stripe, *, mark_paid, receipts, push, dispatch, destination):
+    def __init__(self, db, stripe, *, mark_paid, receipts, push, dispatch, destination, vipps=None):
         self.db, self.stripe = db, stripe
         self.mark_paid, self.receipts, self.push = mark_paid, receipts, push
         self.dispatch, self.destination = dispatch, destination
+        self.vipps = vipps or VippsReservations(db, dispatch=dispatch, mark_paid=mark_paid, receipts=receipts)
 
     def client(self):
         if not self.stripe.api_key:
@@ -46,6 +51,9 @@ class RideReservations:
 
     def validate(self, pi, record):
         metadata = value(pi, "metadata", {}) or {}
+        if (record.get("strict_payment_method") and value(pi, "status") in ("requires_capture", "succeeded")
+                and stripe_id(value(pi, "payment_method")) != record.get("stripe_payment_method_id")):
+            return False
         return bool(
             bool(value(pi, "livemode", False)) == bool(record.get("stripe_livemode", False))
             and stripe_id(pi) == record.get("stripe_payment_intent_id")
@@ -59,36 +67,46 @@ class RideReservations:
 
     async def authorize(self, trip):
         """No trip is searchable until Stripe confirms requires_capture."""
+        if trip.get("payment_provider") == "vipps":
+            return await self.vipps.authorize(trip)
         if is_cash(trip):
             raise HTTPException(409, "Kontantturer skal ikke kortreserveres")
         client = self.client()
         record = await self.record(trip)
         if not record:
             requested_provider = trip.get("payment_provider")
-            wallet = requested_provider == "google_pay"
-            if wallet and not payment_config(self.stripe)["google_pay_enabled"]:
-                raise HTTPException(503, "Google Pay er ikke aktivert")
+            wallet = requested_provider if requested_provider in STRIPE_WALLETS else None
+            strict = bool(wallet or requested_provider == "business")
+            if wallet and not payment_config(self.stripe)[f"{wallet}_enabled"]:
+                raise HTTPException(503, "Lommeboken er ikke aktivert")
             if wallet:
                 customer_id = await customer_for_user(self.db, self.stripe, trip["user_id"])
-                # App bookings normally have a verified wallet SetupIntent. Keep
-                # the empty branch for direct callers so Stripe can return an
-                # in-session client secret instead of dispatching unpaid work.
                 pm = await self.db.payment_methods.find_one({
                     "user_id": trip["user_id"], **method_scope(self.stripe),
-                    "wallet": "google_pay", "verified": True,
+                    "wallet": wallet, "verified": True,
                     "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"},
                 }, sort=[("is_default", -1), ("created_at", -1)])
+                if not pm or pm.get("stripe_customer_id") != customer_id:
+                    raise HTTPException(402, "Lagre og verifiser lommeboken før du bestiller")
+            elif requested_provider == "business":
+                pm = await business_card(self.db, self.stripe, trip["user_id"], trip.get("business_payment_method_id"))
+                if not pm:
+                    raise HTTPException(402, "Bedriftskortet er ikke lenger tilgjengelig")
+                customer_id = await customer_for_user(self.db, self.stripe, trip["user_id"])
+                if pm.get("stripe_customer_id") != customer_id:
+                    raise HTTPException(402, "Bedriftskortet kunne ikke bekreftes i dette betalingsmiljøet")
             else:
                 user = await self.db.users.find_one({"_id": ObjectId(trip["user_id"])}) or {}
                 pm = await self.db.payment_methods.find_one({
                     "user_id": trip["user_id"], **method_scope(self.stripe),
+                    **({"wallet": None} if requested_provider == "card" else {}),
                     "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"},
                 }, sort=[("is_default", -1), ("created_at", -1)])
                 # Preserve the legacy API path where the selected, verified
                 # wallet record was the only provider signal. New app builds
                 # send payment_provider explicitly.
-                if requested_provider is None and pm and pm.get("wallet") == "google_pay":
-                    wallet = True
+                if requested_provider is None and pm and pm.get("wallet") in STRIPE_WALLETS:
+                    wallet = pm["wallet"]
                 customer_id = user.get("stripe_customer_id_live" if is_live(self.stripe) else "stripe_customer_id_test")
                 if not customer_id and bool(user.get("stripe_customer_livemode", False)) == is_live(self.stripe):
                     customer_id = user.get("stripe_customer_id")
@@ -108,8 +126,8 @@ class RideReservations:
                       "kind": "ride_reservation", "session_id": f"reservation:{trip['trip_id']}",
                       "amount": int(trip["price"]), "currency": "nok", "authorized_amount_ore": amount,
                       "stripe_customer_id": customer_id, "stripe_livemode": is_live(self.stripe),
-                      "payment_provider": "google_pay" if wallet else "card",
-                      "wallet": "google_pay" if wallet else None,
+                      "payment_provider": wallet or ("business" if requested_provider == "business" else "card"),
+                      "wallet": wallet, "strict_payment_method": strict,
                       "stripe_payment_method_id": pm["stripe_payment_method_id"] if pm else None,
                       "status": "authorizing", "payment_status": "unpaid", "created_at": datetime.now(timezone.utc)}
             await self.db.payment_transactions.update_one(
@@ -118,7 +136,6 @@ class RideReservations:
             record = await self.record(trip)
         if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
             raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
-        wallet = record.get("payment_provider") == "google_pay" or record.get("wallet") == "google_pay"
         pi = None
         try:
             if record.get("stripe_payment_intent_id"):
@@ -157,15 +174,12 @@ class RideReservations:
         if value(pi, "status") == "requires_capture":
             await self.activate(trip, pi, record)
             return {"authorized": True, "payment_intent_id": pi_id}
-        if wallet and value(pi, "status") in ("requires_payment_method", "requires_confirmation", "requires_action"):
-            raise HTTPException(402, {"code": "reservation_requires_action", "payment_provider": "google_pay",
-                "message": "Bekreft turreservasjonen med Google Pay.", "trip_id": trip["trip_id"],
-                "client_secret": value(pi, "client_secret"), "payment_method_id": record.get("stripe_payment_method_id"),
-                "amount_ore": record["authorized_amount_ore"], "currency": "nok"})
         error = value(pi, "last_payment_error", {}) or {}
         if value(pi, "status") == "requires_action" or value(error, "code") == "authentication_required":
             raise HTTPException(402, {"message": "Godkjenn kortreservasjonen i banken før turen bestilles.",
                                      "code": "reservation_requires_action", "trip_id": trip["trip_id"],
+                                     "confirmation_status": value(pi, "status"),
+                                     "strict_payment_method": record.get("strict_payment_method", False),
                                      "client_secret": value(pi, "client_secret"), "payment_method_id": record["stripe_payment_method_id"]})
         raise HTTPException(402, "Banken godkjente ikke reservasjonen. Bruk et annet kort eller kontroller tilgjengelige midler.")
 
@@ -196,6 +210,8 @@ class RideReservations:
         trip = await self.db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
         if not trip:
             raise HTTPException(404, "Tur ikke funnet")
+        if trip.get("payment_provider") == "vipps":
+            return await self.vipps.confirm(trip)
         record = await self.record(trip)
         if not record or not record.get("stripe_payment_intent_id"):
             raise HTTPException(409, "Ingen kortreservasjon å bekrefte")
@@ -208,6 +224,8 @@ class RideReservations:
         return trip
 
     async def require_reserved(self, trip):
+        if trip.get("payment_provider") == "vipps":
+            return await self.vipps.require_reserved(trip)
         if is_cash(trip) and trip.get("payment_status") == "cash_due":
             return
         if trip.get("payment_flow") != "reservation":
@@ -224,6 +242,8 @@ class RideReservations:
             raise HTTPException(402, "Kortreservasjonen er ikke gyldig. Turen kan ikke startes.")
 
     async def capture(self, trip):
+        if trip.get("payment_provider") == "vipps":
+            return await self.vipps.capture(trip)
         if is_cash(trip):
             raise HTTPException(409, "Kontantturer skal ikke kortbelastes")
         trip = await self.db.trips.find_one({"trip_id": trip["trip_id"]}) or trip
@@ -294,6 +314,8 @@ class RideReservations:
             await self.notify(trip, "Turen er betalt", f"{amount / 100:g} kr ble trukket automatisk. Kvitteringen er klar i SNAR.")
 
     async def release(self, trip):
+        if trip.get("payment_provider") == "vipps":
+            return await self.vipps.release(trip)
         if is_cash(trip):
             await self.db.trips.update_one({"trip_id": trip["trip_id"], "payment_status": {"$in": ["authorizing", "cash_due"]},
                 "status": {"$in": ["cancelled", "cancelled_by_driver"]}}, {"$set": {"payment_status": "not_due"}})
@@ -373,6 +395,9 @@ class RideReservations:
                                 await self.authorize(trip)
                         else:
                             await self.capture(trip)
+                    except HTTPException as exc:
+                        if not isinstance(exc.detail, dict) or exc.detail.get("code") != "vipps_redirect_required":
+                            logging.warning("Ride reservation reconciliation pending: %s", trip["trip_id"])
                     except Exception:
                         logging.warning("Ride reservation reconciliation pending: %s", trip["trip_id"])
             except Exception:

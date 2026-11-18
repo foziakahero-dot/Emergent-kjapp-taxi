@@ -21,6 +21,10 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+from travel_context import install_travel_context
+from customer_trip_context import confirmed_driver_identity, pickup_call_due
+from business_payment import business_card, business_payments_enabled, current_business_profile, install_business_payment
+from vipps_payment import install_vipps, vipps_configured
 from ai_configuration import configured_ai_key, provider_chat_session
 from payment_method_selection import selected_payment_method
 from email_delivery import email_configured, send_transactional_email
@@ -918,7 +922,7 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
-    payment_provider: Literal["card", "google_pay", "cash"] = "card"
+    payment_provider: Literal["card", "google_pay", "apple_pay", "business", "cash", "vipps"] = "card"
 
 
 class RateTripRequest(BaseModel):
@@ -974,6 +978,7 @@ class SettingsUpdate(BaseModel):
     notifications: Optional[bool] = None
     trip_updates: Optional[bool] = None
     auto_booking: Optional[bool] = None
+    pickup_call_requested: Optional[bool] = None
     price_alerts: Optional[bool] = None
     language: Optional[str] = None
     theme: Optional[str] = None
@@ -2914,19 +2919,31 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     if existing_active:
         raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
 
-    # A Google Pay booking supplies its wallet payment method at confirmation time;
-    # cards still require a verified saved method in the matching Stripe mode.
+    business_profile = None
     if body.payment_provider == "cash":
         if not cash_enabled():
             raise HTTPException(503, "Kontantbetaling er midlertidig deaktivert")
-    elif body.payment_provider == "google_pay":
-        if not configured_payments(stripe)["google_pay_enabled"]:
-            raise HTTPException(status_code=503, detail="Google Pay er ikke aktivert for dette betalingsmiljøet")
+    elif body.payment_provider in {"google_pay", "apple_pay"}:
+        if not configured_payments(stripe)[f"{body.payment_provider}_enabled"]:
+            raise HTTPException(status_code=503, detail="Denne lommeboken er ikke aktivert for betalingsmiljøet")
+    elif body.payment_provider == "business":
+        if not business_payments_enabled(stripe):
+            raise HTTPException(503, "Bedriftskort er midlertidig utilgjengelig")
+        business_profile = await current_business_profile(db, current["id"])
+        if not business_profile or not await business_card(db, stripe, current["id"], business_profile["payment_method_id"]):
+            raise HTTPException(402, "Velg et verifisert bedriftskort før du bestiller")
+    elif body.payment_provider == "vipps":
+        if not vipps_configured():
+            raise HTTPException(503, "Vipps/MobilePay er midlertidig utilgjengelig")
+        if not body.waiting_policy_token:
+            raise HTTPException(409, "Innhent oppdatert pris før du bruker Vipps/MobilePay")
     else:
         verified_count = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe),
-            "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
+            "verified": True, "setup_status": "succeeded", "wallet": None, "stripe_payment_method_id": {"$type": "string"}})
         if verified_count == 0:
             raise HTTPException(status_code=402, detail="Legg til og verifiser et betalingskort før du bestiller tur")
+
+    customer_preferences = await db.settings.find_one({"user_id": current["id"]}, {"pickup_call_requested": 1}) if current.get("phone") else None
 
     # Close the concurrent double-tap race between the active-trip check and insert.
     # This is a short creation lock only; canonical active-trip truth remains in db.trips.
@@ -3003,6 +3020,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "stops": [s.model_dump() for s in body.stops],
         "special_needs": list(dict.fromkeys(body.special_needs)),
         "passenger_note": (body.note or "").strip() or None,
+        "pickup_call_requested": (customer_preferences or {}).get("pickup_call_requested") is True,
         "vehicle_type": body.vehicle_type,
         "distance_km": est,
         "duration_min": eta_min,
@@ -3022,8 +3040,11 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "status": "payment_authorizing",
         "payment_status": "authorizing",
         "payment_flow": "cash" if body.payment_provider == "cash" else "reservation",
-        "payment_method": "cash" if body.payment_provider == "cash" else "card",
+        "payment_method": body.payment_provider if body.payment_provider in {"cash", "vipps"} else "card",
         "payment_provider": body.payment_provider,
+        **({"business_payment_method_id": business_profile["payment_method_id"],
+            "business_billing": {key: business_profile[key] for key in ("company_name", "organisation_number")}}
+           if business_profile else {}),
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3046,7 +3067,9 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         else:
             await ride_reservations.authorize(trip)
     except HTTPException as exc:
-        needs_action = isinstance(exc.detail, dict) and exc.detail.get("code") == "reservation_requires_action"
+        needs_action = isinstance(exc.detail, dict) and exc.detail.get("code") in {
+            "reservation_requires_action", "vipps_redirect_required", "vipps_retry_pending",
+        }
         if not needs_action:
             await db.trips.update_one({"trip_id": trip_id, "status": "payment_authorizing"}, {"$set": {
                 "status": "cancelled", "cancelled_by": "system", "cancel_reason": "payment_authorization_failed",
@@ -3056,25 +3079,29 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         raise
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
+    trip.pop("business_payment_method_id", None)
     return trip
 
 
 @api.post("/trips/{trip_id}/authorization/confirm")
 async def confirm_trip_authorization(trip_id: str, current=Depends(require_customer)):
-    return await ride_reservations.confirm(trip_id, current["id"])
+    trip = await ride_reservations.confirm(trip_id, current["id"])
+    trip.pop("business_payment_method_id", None)
+    return trip
 
 
 @api.post("/trips/{trip_id}/authorization/retry")
 async def retry_trip_authorization(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"], "status": "payment_authorizing"})
     if not trip:
-        raise HTTPException(409, "Turen venter ikke på kortgodkjenning")
+        raise HTTPException(409, "Turen venter ikke på betalingsgodkjenning")
     if is_cash(trip):
         await activate_cash(db, trip, offer_trip_to_next_driver)
     else:
         await ride_reservations.authorize(trip)
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
+    trip.pop("business_payment_method_id", None)
     return trip
 
 
@@ -3108,6 +3135,7 @@ async def active_trip(current=Depends(require_customer)):
         return None
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
+    trip.pop("business_payment_method_id", None)
     return trip
 
 
@@ -3159,9 +3187,12 @@ async def get_trip(trip_id: str, current=Depends(require_customer)):
             trip.update({k: v for k, v in row.items() if k.startswith("eta_")})
         else:
             trip.update(eta_min=None, eta_source=None, eta_status="unavailable")
+    if trip.get("driver_id") and trip.get("status") in ("driver_on_way", "at_pickup", "in_trip"):
+        trip["driver_identity_confirmed"] = await confirmed_driver_identity(db, trip["driver_id"])
     trip["server_time"] = datetime.now(timezone.utc).isoformat()
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
+    trip.pop("business_payment_method_id", None)
     return trip
 
 
@@ -4179,14 +4210,6 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
     return {"ready": True, "card": existing, "verified": verified}
 
 
-# ---- Vipps (stub, awaiting API keys) ----
-@api.get("/payments/vipps/config")
-async def vipps_config():
-    """Vipps availability. Returns enabled=false until VIPPS_CLIENT_ID / secret are in env."""
-    enabled = bool(os.environ.get("VIPPS_CLIENT_ID"))
-    return {"enabled": enabled, "provider": "Vipps"}
-
-
 # ---- Settings ----
 @api.get("/settings")
 async def get_settings(current=Depends(get_current_user)):
@@ -4547,6 +4570,8 @@ async def driver_pending(current=Depends(require_driver)):
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         trip_commission = await _commission_for_trip(t)
+        t.pop("business_payment_method_id", None)
+        t.pop("business_billing", None)
         if t.get("commission_source") == "platform_default":
             trip_commission = float((own_fleet or {}).get("commission_rate", trip_commission))
         t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - trip_commission)))
@@ -4762,6 +4787,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "driver_assigned",
     )
     t["id"] = str(t["_id"]); t.pop("_id", None)
+    t.pop("business_payment_method_id", None)
+    t.pop("business_billing", None)
     return t
 
 
@@ -4812,6 +4839,8 @@ async def driver_current(current=Depends(require_driver)):
         except Exception:
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
+    t.pop("business_payment_method_id", None)
+    t.pop("business_billing", None)
     commission = await _commission_for_trip(t)
     estimated_net = int(round((t.get("price") or 0) * (1 - commission)))
     t["estimated_driver_earnings"] = estimated_net
@@ -4834,6 +4863,12 @@ async def driver_current(current=Depends(require_driver)):
                 "duration_min": r["duration_min"],
                 "geometry": r["geometry"],
             }
+    t["pickup_call_due"] = False
+    if pickup_call_due(t, _fresh_driver_location(current.get("last_location_at"))):
+        sample = await db.users.find_one({"_id": ObjectId(current["id"]),
+            "last_lat": current.get("last_lat"), "last_lng": current.get("last_lng")},
+            {"last_location_at": 1, "last_location_recorded_at": 1})
+        t["pickup_call_due"] = bool(sample and fresh_sample_time(sample, datetime.now(timezone.utc)))
     return t
 
 
@@ -8404,7 +8439,9 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
     receipt_number = f"KJAPP-{paid_day}-{(clean_trip[:12] or uuid.uuid4().hex[:12].upper())}"
     payment_kind = (payment or {}).get("kind")
     payment_method = (
-        "cash" if is_cash(trip) else "saved_card" if payment_kind == "auto_charge"
+        "cash" if is_cash(trip) else "business_card" if trip.get("business_billing")
+        else "vipps" if trip.get("payment_provider") == "vipps"
+        else "saved_card" if payment_kind == "auto_charge"
         else "stripe_checkout" if (payment or {}).get("session_id")
         else (trip.get("payment_method") or "card")
     )
@@ -8447,6 +8484,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "fleet_net": max(0, price - platform_fee),
         "payment_status": "paid",
         "payment_method": payment_method,
+        "business_billing": trip.get("business_billing"),
         "stripe_session_id": None if is_cash(trip) else (payment or {}).get("session_id"),
         "stripe_payment_intent_id": (payment or {}).get("stripe_payment_intent_id"),
         "settlement_model": (payment or {}).get("settlement_model"),
@@ -8545,6 +8583,11 @@ async def send_trip_receipts(trip_id: str):
     route = html_escape.escape(f"{receipt.get('pickup_address','')} → {receipt.get('dropoff_address','')}")
     paid_at = receipt.get("paid_at") or datetime.now(timezone.utc).isoformat()
     end_note = "<p>Turen ble avsluttet manuelt før bekreftet destinasjon. Avtalt turpris er beholdt.</p>" if receipt.get("ended_early") else ""
+    business = receipt.get("business_billing") or {}
+    business_line = (
+        f"<p>Jobbtur · {html_escape.escape(business['company_name'])} · Org.nr. {html_escape.escape(business['organisation_number'])}</p>"
+        if business.get("company_name") and business.get("organisation_number") else ""
+    )
 
     async def deliver_once(kind: str, recipient: Optional[str], subject: str, html: str) -> Optional[str]:
         if not recipient:
@@ -8600,7 +8643,7 @@ async def send_trip_receipts(trip_id: str):
         (passenger or {}).get("email"),
         f"SNAR-kvittering · {price} kr",
         f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
-        f"<p>Avtalt rute: {route}</p>{end_note}<p><strong>Total: {price} kr</strong></p>"
+        f"<p>Avtalt rute: {route}</p>{end_note}{business_line}<p><strong>Total: {price} kr</strong></p>"
         f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
     )
     if customer_sent_at:
@@ -12020,6 +12063,7 @@ ride_reservations = RideReservations(
     db, stripe, mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts,
     push=send_push_to_user, dispatch=offer_trip_to_next_driver, destination=_reservation_destination,
 )
+install_vipps(api, ride_reservations.vipps)
 
 ride_search = RideSearch(db, real_filter=_real_trip_filter, offer=offer_trip_to_next_driver,
                          release=ride_reservations.release, notify=send_push_to_user)
@@ -12043,6 +12087,8 @@ install_driver_media(api, db, require_driver=require_driver, require_customer=re
 install_student_verification(api, db, require_customer=require_customer, require_admin=require_admin,
     rate_limit=_enforce_rate_limit, audit=_audit)
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+install_travel_context(api, require_customer, _enforce_rate_limit)
+install_business_payment(api, db, stripe, require_customer, _enforce_rate_limit)
 install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     create_access_token=create_access_token, create_twofa_token=create_twofa_token,
     set_auth_cookie=set_auth_cookie, user_public=user_public, hash_password=hash_password,

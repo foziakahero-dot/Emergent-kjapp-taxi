@@ -23,6 +23,7 @@ import { useReducedMotion } from '@/src/components/Motion';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 import { CUSTOMER_VEHICLE_ART } from '@/src/lib/vehicleAssets';
+import type { BookingPaymentChoice } from '@/src/lib/usePaymentPreference';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
 type PickupOption = { distance_km: number; eta_min: number | null };
@@ -40,8 +41,10 @@ type Props = {
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void;
   onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; onMinimize?: () => void; stops: any[];
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
+  travelDetails?: React.ReactNode;
   onWalletSaved?: (card: any) => void | Promise<void>;
-  cashEnabled?: boolean; cardEnabled?: boolean; cardPayment?: any; onPaymentChoice?: (choice: 'card' | 'cash') => void;
+  cashEnabled?: boolean; cardEnabled?: boolean; cardPayment?: any; onPaymentChoice?: (choice: BookingPaymentChoice) => void;
+  businessEnabled?: boolean; businessName?: string; onBusinessSetup?: () => void; vippsEnabled?: boolean;
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
 const vehicleNames: Record<string, string> = Object.fromEntries(Object.entries(CUSTOMER_VEHICLE_ART).map(([id, art]) => [id, art.label]));
@@ -102,10 +105,11 @@ export function CustomerBookingView(p: Props) {
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><Info title="Kjøretøy" value={vehicleName} /><Info title="Betaling" value={!p.payment && p.cashEnabled ? 'Velg betalingsmåte' : paymentLabel(p.payment)} onPress={() => { p.onReview(false); p.onStage('payment'); }} /></View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}><Text style={v10.secondary}>Turpris</Text><BookingPrice amount={validVehiclePrice(p.price) ? p.price : null} large /></View>
       {priceDetails}{pickupStatus}
-      {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Text testID="waiting-policy-notice" style={v10.secondary}>Ventetid: {p.waitingPolicy.free_minutes} min inkludert, deretter {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text><Text style={[v10.caption, { marginTop: 6 }]}>{p.payment?.type === 'cash' ? 'Betal turpris og eventuell avtalt ventetid kontant direkte til sjåføren etter turen. Ingen kortbelastning.' : `Reserverer opptil ${kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} på kortet. Bare turpris og faktisk ventetid trekkes; resten frigjøres.`}</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
+      {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Text testID="waiting-policy-notice" style={v10.secondary}>Ventetid: {p.waitingPolicy.free_minutes} min inkludert, deretter {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text><Text style={[v10.caption, { marginTop: 6 }]}>{p.payment?.type === 'cash' ? 'Betal turpris og eventuell avtalt ventetid kontant direkte til sjåføren etter turen. Ingen kortbelastning.' : `Reserverer opptil ${kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} ${p.payment?.type === 'vipps' ? 'med Vipps/MobilePay' : 'på kortet'}. Bare turpris og faktisk ventetid trekkes; resten frigjøres.`}</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
     </> : p.stage === 'route' ? <><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
+      {p.travelDetails}
       {!p.locationReady ? locationActions : null}
       {error}<View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 56 }}><Pressable testID="route-adjust-pickup" accessibilityRole="button" accessibilityLabel="Juster hentested" onPress={() => p.onSearch('pickup')} style={{ height: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="pickup" /></Pressable></View><View style={{ flex: 1 }}><V10Action testID="route-choose-vehicle" label="Velg bil" disabled={!p.canReview} onPress={() => p.onStage('vehicles')} /></View></View>
     </> : p.stage === 'vehicles' ? <><Text style={[v10.title, { marginBottom: 4 }]}>Velg reisen din</Text><Text style={[v10.secondary, { marginBottom: 16 }]}>Fast pris før du bestiller</Text>
@@ -121,15 +125,22 @@ export function CustomerBookingView(p: Props) {
       <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: colors.cardSubtle }}>
         {Platform.OS === 'ios' ? p.wallet?.kind === 'apple' ? <View style={{ padding: 12, gap: 8 }}><Text style={v10.caption}>SNAR reserverer avtalt beløp ved bestilling og trekker det endelige turbeløpet etter turen.</Text><ApplePaySetupButton onPress={() => p.onWallet?.()} disabled={p.busy || !p.onWallet} testID="booking-pay-apple" /></View> : <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle="Ikke tilgjengelig på denne enheten" disabled onPress={() => {}} /> : null}
         {Platform.OS === 'web' ? <WebWalletSetup disabled={p.busy} onSaved={async card => { await p.onWalletSaved?.(card); }} /> : null}
-        <PaymentChoice id="card" icon="payment" title={paymentLabel(p.cardPayment)} disabled={p.cardEnabled === false} subtitle={p.cardEnabled === false ? 'Kortbetaling er midlertidig utilgjengelig' : p.cardPayment ? cardExpiryLabel(p.cardPayment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={Boolean(p.payment) && p.payment.type !== 'cash'} onPress={() => { p.onPaymentChoice?.('card'); p.cardPayment ? p.onStage('vehicles') : p.onPayment(); }} />
+        <PaymentChoice id="card" icon="payment" title={paymentLabel(p.cardPayment)} disabled={p.cardEnabled === false || p.busy} subtitle={p.cardEnabled === false ? 'Kortbetaling er midlertidig utilgjengelig' : p.cardPayment ? cardExpiryLabel(p.cardPayment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={!!p.payment && !['cash', 'business', 'vipps'].includes(p.payment.type)} onPress={() => { p.onPaymentChoice?.('card'); p.cardPayment ? p.onStage('vehicles') : p.onPayment(); }} />
         {p.cashEnabled ? <PaymentChoice id="cash" icon="cash" title="Kontant" subtitle="Betal direkte til sjåføren etter turen" selected={p.payment?.type === 'cash'} disabled={p.busy} onPress={() => p.onPaymentChoice?.('cash')} /> : null}
         {Platform.OS === 'android' ? p.wallet?.kind === 'google' ? <View style={{ gap: 8, paddingVertical: 10 }}><Text style={v10.caption}>Lagre Google Pay for turene du bestiller. Avtalt beløp reserveres før turen og belastes når turen avsluttes.</Text><GooglePaySetupButton disabled={p.busy || !p.onWallet} onPress={() => p.onWallet?.()} testID="booking-pay-google" /></View>
           : <PaymentChoice id="google" icon="google" title="Google Pay" subtitle="Ikke tilgjengelig på denne enheten" disabled onPress={() => {}} /> : null}
-        <PaymentChoice id="business" icon="work" title="SNAR Bedrift" subtitle="Bedriftsbetaling er ikke tilgjengelig" disabled onPress={() => {}} />
-        <PaymentChoice id="vipps" icon="payment" title="Vipps" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
+        {p.businessEnabled ? <PaymentChoice id="business" icon="work" title="Bedriftskort"
+          subtitle={p.businessName || 'Koble et verifisert kort og organisasjonsnummer'}
+          selected={p.payment?.type === 'business'} disabled={p.busy || !p.onBusinessSetup}
+          onPress={() => { if (p.businessName) { p.onPaymentChoice?.('business'); p.onStage('vehicles'); } else p.onBusinessSetup?.(); }} /> : null}
+        {p.vippsEnabled ? <PaymentChoice id="vipps" icon="payment" title="Vipps/MobilePay"
+          subtitle="Godkjenn reservasjonen i Vipps/MobilePay"
+          selected={p.payment?.type === 'vipps'} disabled={p.busy}
+          onPress={() => { p.onPaymentChoice?.('vipps'); p.onStage('vehicles'); }} /> : null}
       </View>
+      {p.businessEnabled && p.businessName && p.onBusinessSetup ? <V10Action kind="ghost" small label="Endre bedriftskort" onPress={p.onBusinessSetup} disabled={p.busy} testID="booking-edit-business-card" /> : null}
       <View style={{ marginTop: 12 }}><V10Action testID="booking-add-payment" kind="soft" small icon="plus" label="Legg til betalingsmåte" onPress={p.onPayment} /></View>
-      <Text style={[v10.caption, { marginTop: 12 }]}>{p.payment?.type === 'cash' ? 'Ha kontantbeløpet klart. Sjåføren registrerer mottatt betaling etter turen.' : 'Turen reserveres på ditt verifiserte standardkort. Endre kort under Betalingsmåter.'}</Text>
+      <Text style={[v10.caption, { marginTop: 12 }]}>{p.payment?.type === 'cash' ? 'Ha kontantbeløpet klart. Sjåføren registrerer mottatt betaling etter turen.' : p.payment?.type === 'vipps' ? 'Betalingen bekreftes i Vipps/MobilePay før sjåførsøket starter.' : p.payment?.type === 'business' ? 'Du får kvittering med bedriftens navn og organisasjonsnummer etter betaling.' : 'Turen reserveres på den verifiserte betalingsmåten under Betalingsmåter.'}</Text>
       <V10Action testID="booking-payment-done" kind="ghost" label="Tilbake til bilvalg" onPress={() => p.onStage('vehicles')} />{error}</>)}
   </>;
 }

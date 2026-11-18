@@ -38,6 +38,9 @@
       "bundler": "metro"
     },
     "plugins": [
+      ["expo-calendar", {
+        "calendarPermission": "SNAR bruker kalenderen når du velger et arrangement for å beregne avreisetid."
+      }],
       [
         "@rnmapbox/maps",
         {

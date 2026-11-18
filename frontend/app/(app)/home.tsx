@@ -25,11 +25,12 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
-import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { businessPaymentApi, carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
 import { useBookingPaymentChoice } from '@/src/lib/usePaymentPreference';
+import { RideTravelContext } from '@/src/components/RideTravelContext';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 export default function Home() {
@@ -101,6 +102,10 @@ export default function Home() {
   const setPaymentChoice = bookingPayment.select;
   useEffect(() => { if (activeTrip?.trip_id) bookingPayment.reset(); }, [activeTrip?.trip_id]);
   const { data: paymentConfig } = useQuery({ queryKey: ['payment-config', user?.id], queryFn: paymentApi.nativeConfig, enabled: !!user?.id });
+  const { data: businessConfig } = useQuery({ queryKey: ['business-payment', user?.id], queryFn: businessPaymentApi.get,
+    enabled: !!user?.id && (bookingStage === 'payment' || paymentChoice === 'business'), retry: false });
+  const { data: vippsConfig } = useQuery({ queryKey: ['vipps-payment'], queryFn: paymentApi.vippsConfig,
+    enabled: !!user?.id && (bookingStage === 'payment' || paymentChoice === 'vipps'), retry: false });
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   const [quickPlacesIssue, setQuickPlacesIssue] = useState(false);
@@ -131,7 +136,8 @@ export default function Home() {
       if (!mounted || t.status !== 'cancelled' || t.cancel_reason !== 'no_driver_available') return;
       setSelectedPickup({ name: t.pickup_address, lat: t.pickup_lat, lng: t.pickup_lng });
       setDropoff({ name: t.dropoff_address, lat: t.dropoff_lat, lng: t.dropoff_lng });
-      setPaymentChoice(t.payment_provider === 'cash' ? 'cash' : 'card');
+      const choice = t.payment_provider;
+      setPaymentChoice(choice === 'cash' || choice === 'business' || choice === 'vipps' ? choice : 'card');
       setSelType(t.vehicle_type || 'ai-first'); setSpecialNeeds(t.special_needs || []); setStops((t.stops || []).map((stop: any) => ({ ...stop, name: stop.address || stop.name })));
       setReviewing(false);
     }).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisemål. Velg hentested og reisemål på nytt.'); });
@@ -173,6 +179,7 @@ export default function Home() {
       loadMethods();
       void loadPlaces();
       void queryClient.invalidateQueries({ queryKey: ['customer-active-trip', user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ['business-payment', user?.id] });
       return () => setFocused(false);
     }, [loadMethods, loadPlaces, queryClient, user?.id]),
   );
@@ -285,7 +292,14 @@ export default function Home() {
   }, [selType, selectedTerms]);
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
-  const payMethod = !bookingPayment.ready ? null : cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
+  const businessReady = businessConfig?.enabled === true && businessConfig?.card_ready === true && !!businessConfig?.profile?.company_name;
+  const vippsReady = vippsConfig?.enabled === true;
+  const verifiedCard = confirmedPaymentMethod(methods.filter(method =>
+    (!['google_pay', 'apple_pay'].includes(method.wallet) || paymentConfig?.[method.wallet + '_enabled'] === true)));
+  const payMethod = !bookingPayment.ready ? null : paymentChoice === 'cash' ? cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : null
+    : paymentChoice === 'business' ? businessReady ? { type: 'business', label: businessConfig.profile.company_name } : null
+    : paymentChoice === 'vipps' ? vippsReady ? { type: 'vipps', label: 'Vipps/MobilePay' } : null
+    : paymentConfig?.enabled === false ? null : verifiedCard;
   const savedPlaces = myPlaces.filter(place => normalizeSearchPlace(place));
   const quickPlaces = [...savedPlaces, ...recentPlaces.filter(place => normalizeSearchPlace(place) &&
     !savedPlaces.some(saved => saved.name === place.name && saved.lat === place.lat && saved.lng === place.lng))];
@@ -312,7 +326,7 @@ export default function Home() {
     }
     if (!payMethod) {
       if (paymentConfig?.cash_enabled) {
-        setError('Velg kontantbetaling eller et tilgjengelig kort før du bestiller.');
+        setError('Velg en tilgjengelig betalingsmåte før du bestiller.');
         setBookingStage('payment');
       } else {
         setError('Legg til et betalingskort før du bestiller.');
@@ -334,7 +348,8 @@ export default function Home() {
         vehicle_type: selType,
         stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
         special_needs: specialNeeds,
-        payment_provider: cashSelected ? 'cash' : payMethod?.wallet === 'google_pay' ? 'google_pay' : 'card',
+        payment_provider: paymentChoice !== 'card' ? paymentChoice
+          : payMethod.wallet === 'google_pay' || payMethod.wallet === 'apple_pay' ? payMethod.wallet : 'card',
         ...(waitingPolicy ? {
           waiting_policy_token: waitingPolicy.token,
           quoted_price: priceFor(selType),
@@ -414,9 +429,16 @@ export default function Home() {
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} quoteFresh={quoteFresh} vehicle={selType} price={selectedPrice}
+        travelDetails={dropoff && (locationReady || selectedPickup) ? <RideTravelContext
+          key={`${user?.id}:${pickupPoint.lat}:${pickupPoint.lng}:${dropoff.lat}:${dropoff.lng}:${stops.length}`}
+          userId={user?.id} pickup={pickupPoint} destination={dropoff} driveMinutes={quoteFresh ? estimate?.duration_min : null}
+          allowTransit={stops.length === 0} price={quoteFresh ? selectedPrice : null}
+        /> : undefined}
         nearest={nearest} availableDrivers={selectedPickup ? undefined : cars} driverPosition={available.center} vehicleEtas={vehicleEtas}
         pickupOptions={pickupOptions} pickupOptionsUnavailable={pickupOptionsQuery.isError}
-        payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        payment={payMethod} methods={methods} cardPayment={verifiedCard} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        businessEnabled={businessConfig?.enabled === true} businessName={businessReady ? businessConfig.profile.company_name : undefined}
+        onBusinessSetup={() => router.push('/business-billing' as any)} vippsEnabled={vippsReady}
         onWalletSaved={async card => {
           const selected = await paymentApi.setDefault(card.id);
           if (selected.default_payment_method_id !== card.id) throw new Error('Lommeboken ble ikke valgt.');

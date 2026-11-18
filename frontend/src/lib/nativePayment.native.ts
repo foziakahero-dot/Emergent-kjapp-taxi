@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent, PlatformPay } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
@@ -17,7 +18,7 @@ function assertPaymentConfig(config: any) {
 export async function nativeWalletAvailability(config?: any): Promise<NativeWallet | null> {
   config = config || await paymentApi.nativeConfig();
   try { assertPaymentConfig(config); } catch { return null; }
-  const merchant = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || '';
+  const merchant = Constants.expoConfig?.extra?.applePayMerchantId;
   const eligible = Platform.OS === 'android' ? config.google_pay_enabled === true
     : Platform.OS === 'ios' && config.apple_pay_enabled === true && merchant && merchant === config.apple_merchant_id;
   if (!eligible) return null;

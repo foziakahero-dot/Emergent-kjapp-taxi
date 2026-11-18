@@ -26,7 +26,9 @@ module.exports = ({ config: base }) => {
     }]);
   }
 
-  const merchant = (process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || process.env.APPLE_PAY_MERCHANT_ID || '').trim();
+  const merchant = (isQaBuild
+    ? process.env.EXPO_PUBLIC_QA_APPLE_PAY_MERCHANT_ID || process.env.QA_APPLE_PAY_MERCHANT_ID || ''
+    : process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || process.env.APPLE_PAY_MERCHANT_ID || '').trim();
   plugins.push(['@stripe/stripe-react-native', {
     enableGooglePay: true,
     ...(merchant ? { merchantIdentifier: merchant } : {}),
@@ -47,7 +49,7 @@ module.exports = ({ config: base }) => {
 
   return {
     ...base,
-    extra: { ...base.extra, sourceSha: process.env.EAS_BUILD_GIT_COMMIT_HASH || process.env.EXPO_PUBLIC_SOURCE_SHA || '' },
+    extra: { ...base.extra, applePayMerchantId: merchant, sourceSha: process.env.EAS_BUILD_GIT_COMMIT_HASH || process.env.EXPO_PUBLIC_SOURCE_SHA || '' },
     ...(isQaBuild ? { name: 'SNAR QA BACKEND' } : {}),
     owner: 'elitetransport',
     plugins,

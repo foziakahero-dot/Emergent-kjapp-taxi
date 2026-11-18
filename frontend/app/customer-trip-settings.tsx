@@ -3,7 +3,7 @@ import { Share, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/context/AuthContext';
-import { safetyApi, tripsApi } from '@/src/lib/api';
+import { safetyApi, settingsApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { useTranslation } from '@/src/lib/customerLanguage';
 import { Text } from '@/src/components/Typography';
@@ -16,9 +16,46 @@ const SHARE_STATUSES = ['driver_on_way', 'at_pickup', 'in_trip'];
 const PICKUP_STATUSES = ['driver_on_way', 'at_pickup'];
 
 export default function CustomerTripSettings() {
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  return mode === 'call' ? <PickupCallPreference /> : <ActiveTripPreferences mode={mode} />;
+}
+
+function PickupCallPreference() {
   useColorTheme();
   const { t } = useTranslation();
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { user } = useAuth(), router = useRouter(), qc = useQueryClient();
+  const key = ['customer-pickup-call', user?.id];
+  const preference = useQuery({ queryKey: key, queryFn: settingsApi.get, enabled: !!user?.id });
+  const lock = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const save = async (value: boolean) => {
+    if (lock.current || !user?.id) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      const result = await settingsApi.update({ pickup_call_requested: value });
+      if (result?.pickup_call_requested !== value) throw new Error(t('Anropsvalget ble ikke bekreftet.'));
+      qc.setQueryData(key, result);
+    } catch (e) { setError(apiError(e)); }
+    finally { lock.current = false; setBusy(false); }
+  };
+  const label = t('Be sjåføren ringe før henting');
+  return <V10Screen dock testID="customer-pickup-call-screen">
+    <V10Header title={label} onBack={() => router.back()} />
+    {preference.isPending ? <Loader /> : preference.isError ? <V10State icon="wifiOff" warning
+      title={t('Kunne ikke hente anropsvalget')} body={t('Sjekk forbindelsen og prøv igjen.')} action={t('Prøv igjen')} onAction={() => void preference.refetch()} /> : <V10Group>
+      <V10Row icon="phone" title={label}
+        subtitle={t('Sjåføren får en beskjed i appen ca. to minutter før henting når du har telefonnummer på kontoen. Gjelder nye turer.')}
+        right={<DesignToggle label={label} value={preference.data?.pickup_call_requested === true}
+          disabled={busy} onChange={value => void save(value)} testID="customer-pickup-call-toggle" />} />
+    </V10Group>}
+    {error ? <Text accessibilityRole="alert" style={[v10.secondary, { marginTop: 12, color: colors.danger }]}>{error}</Text> : null}
+  </V10Screen>;
+}
+
+function ActiveTripPreferences({ mode }: { mode?: string }) {
+  useColorTheme();
+  const { t } = useTranslation();
   const pickup = mode === 'pickup';
   const { user } = useAuth(), router = useRouter(), qc = useQueryClient();
   const key = ['customer-settings-trip', user?.id];

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { paymentPreferenceKey, readPaymentPreference, savePaymentPreference, type PaymentChoice } from './paymentPreference';
 
+export type BookingPaymentChoice = PaymentChoice | 'business' | 'vipps';
+
 export function usePaymentPreference(userId?: string) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: paymentPreferenceKey(userId || ''),
@@ -18,12 +20,12 @@ export function usePaymentPreference(userId?: string) {
 /** A deliberate choice for this booking wins over late preference reads and refetches. */
 export function useBookingPaymentChoice(userId?: string) {
   const preferred = usePaymentPreference(userId);
-  const [override, setOverride] = useState<{ userId?: string; choice: PaymentChoice } | null>(null);
+  const [override, setOverride] = useState<{ userId?: string; choice: BookingPaymentChoice } | null>(null);
   const manual = override !== null && override.userId === userId;
   return {
     choice: manual ? override.choice : preferred.choice || 'card',
     ready: manual || (!preferred.pending && !preferred.failed),
-    select: (choice: PaymentChoice) => setOverride({ userId, choice }),
+    select: (choice: BookingPaymentChoice) => setOverride({ userId, choice }),
     reset: () => setOverride(null),
   };
 }
