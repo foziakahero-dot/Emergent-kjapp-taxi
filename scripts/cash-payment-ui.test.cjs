@@ -149,3 +149,18 @@ test('automatic refresh updates displayed server fares and stale prices cannot b
   assert.match(text(tree),/Oppdaterer prisene/);
   await renderer.act(async()=>tree.unmount());
 });
+
+test('customers see the pickup estimate and can book a driver more than five kilometres away',async()=>{
+  let tree, bookings = 0;
+  const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');
+  const props={...booking,stage:'vehicles',reviewing:true,onBook:()=>bookings++,pickupOptions:{'ai-first':{distance_km:10.1,eta_min:24}}};
+  await renderer.act(async()=>{tree=renderer.create(React.createElement(CustomerBookingView,props));});
+  assert.match(byId(tree,'booking-pickup-availability').props.children,/24 min til henting · 10,1 km unna/);
+  const confirm=byId(tree,'booking-confirm');
+  assert.equal(confirm.props.disabled,false);
+  await renderer.act(async()=>confirm.props.onPress());
+  assert.equal(bookings,1);
+  await renderer.act(async()=>tree.update(React.createElement(CustomerBookingView,{...props,pickupOptions:{}})));
+  assert.match(byId(tree,'booking-pickup-availability').props.children,/Ingen ledige sjåfører/);
+  await renderer.act(async()=>tree.unmount());
+});

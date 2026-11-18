@@ -25,9 +25,11 @@ import { kr } from '@/src/lib/format';
 import { CUSTOMER_VEHICLE_ART } from '@/src/lib/vehicleAssets';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
+type PickupOption = { distance_km: number; eta_min: number | null };
 type Props = {
   stage: BookingStage; reviewing: boolean; pickup: string; destination: any; estimate: any; quotedAt?: number | null; quoteFresh?: boolean;
   availableDrivers?: MapCarData[]; driverPosition?: { lat: number; lng: number } | null;
+  pickupOptions?: Record<string, PickupOption>; pickupOptionsUnavailable?: boolean;
   vehicleEtas?: Record<string, number>; vehicle: string; price: number | null; nearest: number | null; payment: any; methods: any[];
   waitingPolicy: any; busy: boolean; canReview: boolean; canBook: boolean;
   error: string; firstName: string; initials: string; places: any[]; placesIssue: boolean;
@@ -55,6 +57,12 @@ export function CustomerBookingView(p: Props) {
     { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
   ];
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
+  const pickupOption = p.pickupOptions?.[p.vehicle];
+  const pickupSummary = pickupOption ? pickupEstimate(pickupOption)
+    : p.pickupOptions ? 'Ingen ledige sjåfører for denne biltypen akkurat nå. Velg en annen biltype, endre hentested eller søk likevel.'
+    : p.pickupOptionsUnavailable ? 'Kan ikke sjekke ledige biler akkurat nå. Du kan fortsatt søke.'
+    : 'Sjekker ledige biler ved hentestedet…';
+  const pickupStatus = <Text testID="booking-pickup-availability" accessibilityLiveRegion="polite" style={[v10.secondary, { marginBottom: 12 }]}>{pickupSummary}</Text>;
   const stopFee = p.estimate?.options?.find((option: any) => option.vehicle_type === p.vehicle)?.extra_stop_fee_total;
   const priceDetails = p.quoteFresh !== false && validVehiclePrice(p.price) ? <Text testID="booking-price-details" style={[v10.secondary, { marginBottom: 12 }]}>
     Fastprisen inkluderer mva{validVehiclePrice(stopFee) ? ` og ${kr(stopFee)} for ekstra stopp` : ''}.{confirmedWaitingPolicy(p.waitingPolicy) && p.waitingPolicy.max_fee > 0 ? ' Venting utover inkludert tid kan koste ekstra.' : ''}
@@ -93,7 +101,7 @@ export function CustomerBookingView(p: Props) {
     {sheet(p.reviewing ? <><Text style={[v10.heading, { marginBottom: 16 }]}>Bekreft tur</Text><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={arrivalTime(p.estimate?.duration_min, p.quotedAt) !== '—' ? `Ankomst ca. ${arrivalTime(p.estimate.duration_min, p.quotedAt)}` : p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><Info title="Kjøretøy" value={vehicleName} /><Info title="Betaling" value={!p.payment && p.cashEnabled ? 'Velg betalingsmåte' : paymentLabel(p.payment)} onPress={() => { p.onReview(false); p.onStage('payment'); }} /></View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}><Text style={v10.secondary}>Turpris</Text><BookingPrice amount={validVehiclePrice(p.price) ? p.price : null} large /></View>
-      {priceDetails}
+      {priceDetails}{pickupStatus}
       {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Text testID="waiting-policy-notice" style={v10.secondary}>Ventetid: {p.waitingPolicy.free_minutes} min inkludert, deretter {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text><Text style={[v10.caption, { marginTop: 6 }]}>{p.payment?.type === 'cash' ? 'Betal turpris og eventuell avtalt ventetid kontant direkte til sjåføren etter turen. Ingen kortbelastning.' : `Reserverer opptil ${kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} på kortet. Bare turpris og faktisk ventetid trekkes; resten frigjøres.`}</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
     </> : p.stage === 'route' ? <><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
@@ -103,9 +111,10 @@ export function CustomerBookingView(p: Props) {
     </> : p.stage === 'vehicles' ? <><Text style={[v10.title, { marginBottom: 4 }]}>Velg reisen din</Text><Text style={[v10.secondary, { marginBottom: 16 }]}>Fast pris før du bestiller</Text>
       <Text testID="booking-price-updates" accessibilityLiveRegion="polite" style={[v10.caption, { marginBottom: 10 }]}>{p.quoteFresh === false ? 'Oppdaterer prisene… Vent på et nytt tilbud før bestilling.' : 'Prisene oppdateres automatisk før bestilling. Du bekrefter alltid gjeldende pris.'}</Text>
       <View style={{ gap: 6 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type} fresh={p.quoteFresh !== false}
-        option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)} eta={p.vehicleEtas?.[choice.type] ?? (p.vehicle === choice.type ? p.nearest : null)} onSelect={p.onVehicle} />)}</View>
-      <View style={{ marginTop: 12 }}>{priceDetails}</View>
-      <AvailableDriverList cars={(p.availableDrivers || []).filter(car => car.type === p.vehicle)} point={p.driverPosition} />
+        option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)}
+        pickup={p.pickupOptions ? p.pickupOptions[choice.type] ?? null : undefined} onSelect={p.onVehicle} />)}</View>
+      <View style={{ marginTop: 12 }}>{pickupStatus}{priceDetails}</View>
+      {p.availableDrivers?.some(car => car.type === p.vehicle) ? <AvailableDriverList cars={p.availableDrivers.filter(car => car.type === p.vehicle)} point={p.driverPosition} /> : null}
       <Pressable testID="booking-payment-row" accessibilityRole="button" accessibilityLabel={`Endre betaling. ${paymentLabel(p.payment)}`} onPress={() => p.onStage('payment')} style={{ flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 54, paddingHorizontal: 14, paddingVertical: 12, marginVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.surface }}><V10Icon name={p.payment?.type === 'cash' ? 'cash' : 'payment'} size={22} /><Text style={[v10.body, { flex: 1 }]}>{!p.payment && p.cashEnabled ? 'Velg betalingsmåte' : paymentLabel(p.payment)}</Text><Text style={v10.caption}>Endre</Text><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
     </> : <><Text style={[v10.heading, { marginBottom: 14 }]}>Betal med</Text>
@@ -130,7 +139,12 @@ const vehicleChoices = [
   { type: 'suv', name: 'SUV', note: 'Mer plass' },
   { type: 'trygg', name: 'SNAR XL', note: 'For flere reisende' },
 ] as const;
-function VehicleChoice({ choice, option, selected, fresh, eta, onSelect }: { choice: typeof vehicleChoices[number]; option: any; selected: boolean; fresh: boolean; eta?: number | null; onSelect: (type: string) => void }) {
+function pickupEstimate(pickup: PickupOption) {
+  const minutes = pickup.eta_min;
+  const distance = pickup.distance_km.toLocaleString('nb-NO');
+  return minutes != null ? `Ca. ${minutes} min til henting · ${distance} km unna` : `Nærmeste ledige bil er ${distance} km unna`;
+}
+function VehicleChoice({ choice, option, selected, fresh, pickup, onSelect }: { choice: typeof vehicleChoices[number]; option: any; selected: boolean; fresh: boolean; pickup?: PickupOption | null; onSelect: (type: string) => void }) {
   useColorTheme();
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(selected ? 1 : 0)).current;
@@ -143,15 +157,15 @@ function VehicleChoice({ choice, option, selected, fresh, eta, onSelect }: { cho
   // Comfort is a distinct source class; legacy "enkelt" is not a Comfort contract.
   const supported = validVehiclePrice(option?.price);
   const disabled = !supported || !fresh;
-  const arrival = Number.isFinite(eta) && Number(eta) > 0 ? `${eta} min unna · ` : '';
   const seats = Number.isInteger(option?.passenger_seats) && option.passenger_seats > 0 ? option.passenger_seats : null;
+  const availability = pickup ? pickupEstimate(pickup) : pickup === null ? 'Ingen ledige akkurat nå' : '';
   return <Pressable testID={`vehicle-${choice.type}`} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled }} disabled={disabled}
-    accessibilityLabel={`${choice.name}${seats ? `, ${seats} seter` : ''}. ${!fresh ? 'Oppdaterer pris' : supported ? `${arrival}${kr(option.price)}` : 'Ikke tilgjengelig'}`}
+    accessibilityLabel={`${choice.name}${seats ? `, ${seats} seter` : ''}. ${!fresh ? 'Oppdaterer pris' : supported ? kr(option.price) : 'Ikke tilgjengelig'}${supported && availability ? `. ${availability}` : ''}`}
     onPress={() => { if (!disabled) onSelect(choice.type); }} style={[styles.vehicle, disabled && { opacity: .5 }]}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 1.5,
       opacity: progress, borderColor: colors.accent, backgroundColor: colors.accentSoft }]} />
     <V10CategoryImage kind={choice.type} selected={selected} />
-    <View style={{ flex: 1, minWidth: 0 }}><Text style={[v10.body, { fontFamily: font.semibold }]}>{choice.name}</Text><Text style={[v10.caption, { marginTop: 3 }]}>{supported ? `${arrival}${seats ? `${seats} seter` : choice.note}` : 'Ikke tilgjengelig'}</Text></View>
+    <View style={{ flex: 1, minWidth: 0 }}><Text style={[v10.body, { fontFamily: font.semibold }]}>{choice.name}</Text><Text style={[v10.caption, { marginTop: 3 }]}>{supported ? availability || (seats ? `${seats} seter` : choice.note) : 'Ikke tilgjengelig'}</Text></View>
     <BookingPrice amount={supported ? option.price : null} />
   </Pressable>;
 }
