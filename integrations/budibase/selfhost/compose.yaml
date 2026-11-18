@@ -1,0 +1,14 @@
+name: snar-budibase-community
+services:
+  budibase:
+    # Verified Docker Hub v4.0.1 stable digest on 2026-11-18. No floating latest tag.
+    image: budibase/budibase@sha256:aa6254657857973841f5ada454dca7f05d518f0c8a48ba73b056556fd4728343
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10000:80"
+    env_file:
+      - .env
+    volumes:
+      - budibase_data:/data
+volumes:
+  budibase_data:

@@ -1,0 +1,32 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> snar-budibase-contract-tests@1.0.0 test
+> node --test tests/database.test.mjs
+
+✔ gateway has no direct table reads, writes, or identity-helper execution (4048.548529ms)
+✔ unknown, blocked, disabled and wrong-issuer identities fail closed (19.533857ms)
+✔ transaction-local identity never leaks to the next pooled request (15.814314ms)
+✔ driver and passenger cannot use admin functions or mutations (35.085082ms)
+✔ ownership uses users.id, not drivers.id; driver sees only own vehicles and rides (22.703812ms)
+✔ dashboard and active rides reflect data, not static online text (15.630162ms)
+✔ lists support status, search, pagination and literal injection text (20.901169ms)
+✔ driver approval records real actor and atomic audit (13.868276ms)
+✔ stale/repeated driver action is rejected without duplicate audit (14.233418ms)
+✔ driver rejection and suspension require a reason and legal transition (17.657264ms)
+✔ expired documents, blocked user and incorrect user role prevent approval (31.064521ms)
+✔ vehicle approval requires correct approved driver and valid insurance (98.402548ms)
+✔ vehicle rejection requires reason; missing and stale rows fail (20.113444ms)
+✔ price writes are blocked until storage unit is explicitly confirmed (16.290006ms)
+✔ price update preserves integer amounts and produces audit and version (19.211775ms)
+✔ negative, fractional, overflow, string, null, extra and missing price values fail (23.437856ms)
+✔ null versions and filters cannot bypass action and pagination checks (20.941272ms)
+✔ ordinary SQL writer also invalidates stale UI version (11.892292ms)
+✔ migration can be rerun without deleting rows, identities or prices (35.571497ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4768.945093

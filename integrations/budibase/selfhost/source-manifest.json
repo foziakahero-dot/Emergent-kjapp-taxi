@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-18",
+  "github_release": {
+    "tag": "v4.0.1",
+    "published_at": "2026-11-16T09:34:13Z",
+    "prerelease": false,
+    "url": "https://github.com/Budibase/budibase/releases/tag/v4.0.1"
+  },
+  "docker_hub": {
+    "repository": "budibase/budibase",
+    "tag": "v4.0.1",
+    "digest": "sha256:aa6254657857973841f5ada454dca7f05d518f0c8a48ba73b056556fd4728343",
+    "updated": "2026-11-16T09:29:53.343473Z"
+  },
+  "selection": "self-hosted Community; no paid resources",
+  "runtime_status": "BLOCKED: no docker/podman binary or connected host",
+  "portal_login": "verified via supplied HTTPS portal URL",
+  "cloud_tenant_status": "unconfirmed; empty tenant list and domain-already-exists error; no subscription purchased"
+}

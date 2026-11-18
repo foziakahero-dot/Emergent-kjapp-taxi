@@ -43,3 +43,11 @@
 ## 4. Automatiseringspakke
 
 Se `qa/mobile-beta/README.md` for kjørekommandoer, verktøysammenligning, språk/tilgjengelighet, CI, feilinjektering og last. Portrettlåsen er tilsiktet; 217 kr er eksempeldata og skal ikke hardkodes som produksjonspris.
+
+## 5. Separat PostgreSQL/Budibase-spor
+
+Brukerens nye skjema er implementert som isolert, testet SQL-/REST-kandidat under `integrations/budibase`; 44 lokale kontroller består. Dette erstatter ikke eksisterende Mongo-QA og løser ikke betaens P0-er. Tilkoblet Render-konto har ingen PostgreSQL-instanser. Budibase-innlogging ble stoppet av nettleserens sikkerhetspolicy etter brukerens metode-/kontovalg; automatisk kontroll avviste nytt forsøk. Fullmakt mangler ikke. Identifiser eksisterende database og et støttet innlogget Budibase-arbeidsområde før migrering/tilkobling. Skjermbygging, individuell IdP/MFA, faktisk DB-transport og to-sjåførtest er fortsatt blokkert/ikke kjørt. Ikke opprett en ny erstatningsdatabase eller svekk innlogging for å omgå disse punktene.
+
+## Siste oppfølging – gratis Community
+
+Brukeren har valgt gratis Community, uten nye betalte ressurser. Portalinnlogging er bekreftet; Cloud-tenantstatus er uavklart (tom liste, domene allerede i bruk). Neste avhengighet er eksisterende vert med Docker/Linux-containere og persistent disk, deretter identifisert PostgreSQL og individuell innlogging. Pakken er klar i integrations/budibase/selfhost. Ingen vert, database eller abonnement er opprettet.
