@@ -1,0 +1,53 @@
+appId: no.kjapp.app
+name: QA Customer registration and consent
+tags:
+  - qa
+  - registration
+# Run only against an independently verified qa-profile APK.
+# Inject synthetic, short-lived credentials at runtime; never commit their values.
+---
+- assertTrue: ${MAESTRO_CUSTOMER_EMAIL.endsWith("@example.invalid")}
+- assertTrue: ${MAESTRO_CUSTOMER_PASSWORD.length >= 16}
+- launchApp:
+    clearState: true
+- setLocation:
+    latitude: 59.9111
+    longitude: 10.7528
+- extendedWaitUntil:
+    visible:
+      id: onboarding-login
+    timeout: 30000
+- tapOn:
+    id: onboarding-login
+- tapOn:
+    id: login-to-register
+- tapOn:
+    id: register-name
+- inputText: SNAR Synthetic QA Customer
+- tapOn:
+    id: register-email
+- inputText: ${MAESTRO_CUSTOMER_EMAIL}
+- tapOn:
+    id: register-password
+- inputText: ${MAESTRO_CUSTOMER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: register-submit
+- assertVisible: Du må godta vilkår og personvern før kontoen opprettes.
+- tapOn:
+    id: register-legal-consent
+- tapOn:
+    id: register-submit
+- extendedWaitUntil:
+    visible:
+      id: setup-skip
+    timeout: 30000
+- tapOn:
+    id: setup-skip
+- tapOn:
+    id: permissions-manual
+- extendedWaitUntil:
+    visible:
+      id: home-map
+    timeout: 30000
+- takeScreenshot: customer-registered-home

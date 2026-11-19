@@ -1,5 +1,6 @@
 import { BlurTargetView } from 'expo-blur';
 import { useTripUpdates } from '@/src/lib/useTripUpdates';
+import { DRIVER_DOCK_HEIGHT, driverDockBottom } from '@/src/components/DriverHomeChrome';
 import { DriverCockpitView } from '@/src/components/DriverCockpitView';
 import { DriverNavigationPanel } from '@/src/components/DriverNavigationPanel';
 import { useDriverNavigation } from '@/src/lib/useDriverNavigation';
@@ -25,7 +26,7 @@ import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripRecei
 import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
 import { projectedOfferTime } from '@/src/lib/offerClock';
 
-type Loc = { lat: number; lng: number; heading?: number };
+type Loc = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 function hoursLabel(min?: number) {
   const m = min || 0;
@@ -73,6 +74,8 @@ export default function DriverHome() {
   const [completedTrip, setCompletedTrip] = useState<any>(null);
   const [tripMinimized, setTripMinimized] = useState(false);
   const [summary, setSummary] = useState<any>(null);
+  const [headerHeight, setHeaderHeight] = useState(150);
+  const [waitingHeight, setWaitingHeight] = useState(156);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
   const shiftActionLock = useRef(false);
@@ -259,7 +262,7 @@ export default function DriverHome() {
 
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         if (!active) return;
-        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
+        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed, heading: pos.coords.heading !== null && pos.coords.heading >= 0 ? pos.coords.heading : undefined };
         gpsBlocked.current = false;
         setLoc(p);
         setError('');
@@ -280,7 +283,7 @@ export default function DriverHome() {
           },
           (u) => {
             if (!active) return;
-            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
+            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, speed: u.coords.speed, heading: u.coords.heading !== null && u.coords.heading >= 0 ? u.coords.heading : undefined };
             setLoc(np);
             driverApi.location(
               np.lat,
@@ -334,7 +337,7 @@ export default function DriverHome() {
             latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
           throw new Error('SNAR fikk ikke en gyldig GPS-posisjon. Prøv igjen.');
         }
-        const nextLocation: Loc = { lat: latitude, lng: longitude, heading: heading || 0 };
+        const nextLocation: Loc = { lat: latitude, lng: longitude, speed, heading: heading || 0 };
         const recordedAt = new Date(position.timestamp).toISOString();
         let locationResult = await driverApi.location(
           latitude,
@@ -663,18 +666,21 @@ export default function DriverHome() {
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
       <BlurTargetView ref={mapTarget} style={StyleSheet.absoluteFill}><Map
         style={StyleSheet.absoluteFill}
-        user={!current ? loc : null}
+        user={null}
         pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
         dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
         route={navigation.active ? navigation.coordinates : current ? mapRoute : firstOffer?.geometry?.coordinates}
         navigationFollow={navigation.active}
-        activeCar={current && loc ? loc : null}
+        activeCar={loc}
+        controlsTop={!current && !firstOffer ? Math.max(58, insets.top + 10) + headerHeight + 12 : Math.max(116, insets.top + 100)}
+        overlayBottom={!current && !firstOffer ? driverDockBottom(insets.bottom) + DRIVER_DOCK_HEIGHT + 12 + waitingHeight + 12 : 170}
         testID="driver-map"
       /></BlurTargetView>
       {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
       <DriverCockpitView
         connected={backendConnected} readiness={readiness.isError ? null : readiness.data} readinessError={readiness.isError ? apiError(readiness.error) : ''} onRefreshReadiness={() => void readiness.refetch()}
+        onHeaderHeight={setHeaderHeight} onWaitingHeight={setWaitingHeight}
         mapTarget={mapTarget} user={user} online={online} busy={busy || summaryActionBusy} error={error}
         summary={summary} current={current} completed={completedTrip} offer={firstOffer}
         offerRemaining={offerRemaining} offerExpired={offerExpired} offerDistance={offerDistance} offerDuration={offerDuration}

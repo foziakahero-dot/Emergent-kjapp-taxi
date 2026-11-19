@@ -1,14 +1,15 @@
+import { DriverVehicleMarker } from './DriverVehicleMarker';
+import { DriverMapControls } from './DriverMapControls';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { Image, PanResponder, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
-import { Icon } from './Icon';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { CarShape, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -67,6 +68,8 @@ export function TileMap({
   user,
   style,
   testID,
+  controlsTop = 116,
+  overlayBottom = 170,
   interactive = true,
 }: {
   pickup?: LL | null;
@@ -77,6 +80,8 @@ export function TileMap({
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  controlsTop?: number;
+  overlayBottom?: number;
   interactive?: boolean;
 }) {
   useColorTheme();
@@ -212,14 +217,6 @@ export function TileMap({
               </G>
             ))}
 
-            {smoothCar ? (
-              <>
-                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${36 / 24}) translate(-12, -12)`}>
-                  <CarShape {...CAR_ACTIVE} />
-                </G>
-              </>
-            ) : null}
 
             {pickup ? (
               <G>
@@ -244,46 +241,22 @@ export function TileMap({
               </G>
             ) : null}
           </Svg>
+          {smoothCar && (
+            <DriverVehicleMarker heading={smoothCar.heading} speed={activeCar?.speed}
+              point={{ x: sx(smoothCar.lng), y: sy(smoothCar.lat) }} />
+          )}
 
           {/* attribution */}
           <Text
-            style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: 'rgba(244,244,240,0.35)', pointerEvents: 'none' }}
+            style={{ position: 'absolute', bottom: overlayBottom + 8, left: 6, fontSize: 8, color: colors.textSecondary, backgroundColor: colors.glass, padding: 3, borderRadius: 4, pointerEvents: 'none' }}
           >
             {ATTRIB}
           </Text>
 
-          {interactive ? (
-            <View style={{ position: 'absolute', right: 12, bottom: Platform.OS === 'web' ? 150 : 180, gap: 8 }}>
-              <Ctrl name="plus" onPress={() => { setManual(true); setZoom((z) => Math.min(MAX_Z, z + 1)); }} testID="map-zoom-in" />
-              <Ctrl name="minus" onPress={() => { setManual(true); setZoom((z) => Math.max(MIN_Z, z - 1)); }} testID="map-zoom-out" />
-              <Ctrl name="crosshair" onPress={recenter} testID="map-recenter" />
-            </View>
-          ) : null}
+          {interactive ? <DriverMapControls top={controlsTop} onZoomIn={() => { setManual(true); setZoom(z => Math.min(MAX_Z, z + 1)); }} onZoomOut={() => { setManual(true); setZoom(z => Math.max(MIN_Z, z - 1)); }} onRecenter={recenter} /> : null}
         </>
       )}
     </View>
-  );
-}
-
-function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
-  useColorTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      testID={testID}
-      style={{
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(12,18,22,0.92)',
-        borderWidth: 1,
-        borderColor: colors.line,
-      }}
-    >
-      <Icon name={name} size={20} color={colors.accentOn} />
-    </Pressable>
   );
 }
 

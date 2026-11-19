@@ -18,6 +18,7 @@ const P: Record<string, React.ReactNode> = {
   voice: <><Rect x="9" y="3.5" width="6" height="11" rx="3"/><Path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></>,
   safety: <><Path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6z"/><Path d="m9 12 2 2 4-4"/></>,
   payment: <><Rect x="3.5" y="6" width="17" height="12" rx="2.5"/><Path d="M3.5 10h17M7 14.5h3"/></>,
+  cash: <><Rect x="2.5" y="6" width="19" height="12" rx="2"/><Circle cx="12" cy="12" r="3"/><Path d="M3 10a4 4 0 0 0 4-4M17 6a4 4 0 0 0 4 4M3 14a4 4 0 0 1 4 4M17 18a4 4 0 0 1 4-4"/></>,
   receipt: <><Path d="M6 3.5h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><Path d="M9 8.5h6M9 12h6M9 15.5h3"/></>,
   fleet: <><Path d="M3.5 17v-2.5l1.4-3a1.5 1.5 0 0 1 1.3-.9h5.6a1.5 1.5 0 0 1 1.3.9l1.4 3V17z"/><Path d="M8 7.5l.8-1.6a1.5 1.5 0 0 1 1.3-.9h5.6a1.5 1.5 0 0 1 1.3.9l1.4 3V14H16"/><Path d="M6 17v1.5M12 17v1.5"/></>,
   earnings: <><Path d="M4 19.5h16"/><Path d="M6.5 16v-4M11 16V8.5M15.5 16v-6M20 4.5l-5 4-4-2.5-6.5 4.5" strokeOpacity=".5"/></>,

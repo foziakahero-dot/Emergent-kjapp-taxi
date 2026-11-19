@@ -9,12 +9,14 @@ import { useAuth } from '@/src/context/AuthContext';
 import { aiApi, api } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { font, makeStyles, useTheme } from '@/src/theme';
+import { useTranslation } from '@/src/lib/customerLanguage';
 
 type Message = { role: 'assistant' | 'user'; text: string };
 const FAQ = ['Hvordan fungerer fastpris?', 'Jeg glemte noe i bilen', 'Endre destinasjon underveis', 'Refusjon og klage på en tur'];
 
 /** Figma Support layout, with replies and ticket IDs supplied by SNAR. */
 export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () => void; initialMessage?: string }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const s = useStyles();
   const insets = useSafeAreaInsets();
@@ -24,12 +26,13 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
   const active = useRef(true);
   const requestLock = useRef(false);
   const sessionId = useRef(`support_${user?.id || 'customer'}_${Date.now()}`).current;
-  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', text: 'Hei! Jeg er SNAR AI-assistent. Spør meg om det meste, eller velg et vanlig tema under. Trenger du et menneske, kan du sende en henvendelse.' }]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState(initialMessage);
   const [failed, setFailed] = useState('');
   const lastTicket = useRef<{ message: string; ticket: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [aiUnavailable, setAiUnavailable] = useState(false);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const append = (message: Message) => setMessages(previous => [...previous, message]);
 
@@ -41,25 +44,30 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
     try {
       const result = await aiApi.chat(value, sessionId);
       if (active.current) {
-        if (typeof result.reply !== 'string' || !result.reply.trim()) throw new Error('Ingen svar mottatt. Prøv igjen.');
+        setAiUnavailable(false);
+        if (typeof result.reply !== 'string' || !result.reply.trim()) throw new Error(t('Ingen svar mottatt. Prøv igjen.'));
         append({ role: 'assistant', text: result.reply });
       }
-    } catch (e) { if (active.current) { setError(apiError(e)); setFailed(value); setInput(current => current || value); } }
+    } catch (e: any) { if (active.current) {
+      const unavailable = e?.response?.status === 503;
+      setAiUnavailable(unavailable); setError(unavailable ? '' : apiError(e));
+      setFailed(value); setInput(current => current || value);
+    } }
     finally { requestLock.current = false; if (active.current) setBusy(false); }
   };
   const escalate = async () => {
     if (requestLock.current) return;
-    const text = input.trim() || messages.filter(message => message.role === 'user').map(message => message.text).join('\n');
-    if (text.length < 10) { setError('Skriv minst 10 tegn om hva du trenger hjelp med.'); return; }
-    if (!user?.email && !user?.phone) { setError('Legg til kontaktinformasjon før du sender en henvendelse.'); return; }
+    const text = [...new Set([initialMessage, ...messages.filter(message => message.role === 'user').map(message => message.text), input].map(value => value.trim()).filter(Boolean))].join('\n\n');
+    if (text.length < 10) { setError(t("Skriv minst 10 tegn om hva du trenger hjelp med.")); return; }
+    if (!user?.email && !user?.phone) { setError(t("Legg til kontaktinformasjon før du sender en henvendelse.")); return; }
     if (lastTicket.current?.message === text) { setError(`Denne henvendelsen er allerede mottatt. Saksnummer: ${lastTicket.current.ticket}.`); return; }
     requestLock.current = true; setBusy(true); setError('');
     try {
       const result = await api.post('/support/public', { topic: 'annet', name: user?.fullName, contact: user?.email || user?.phone, message: text.slice(0, 4000) });
       if (active.current) {
-        if (result.data?.ok !== true || !result.data?.ticket_id) throw new Error('Henvendelsen kunne ikke bekreftes.');
+        if (result.data?.ok !== true || !result.data?.ticket_id) throw new Error(t('Henvendelsen kunne ikke bekreftes.'));
         lastTicket.current = { message: text, ticket: result.data.ticket_id };
-        append({ role: 'assistant', text: `Henvendelsen er mottatt. Saksnummer: ${result.data.ticket_id}. Kontaktinformasjon: ${user?.email || user?.phone}.` });
+        append({ role: 'assistant', text: `${t('Henvendelsen er mottatt. Saksnummer:')} ${result.data.ticket_id}.` });
         setInput(''); setFailed('');
       }
     } catch (e) { if (active.current) setError(apiError(e)); }
@@ -67,9 +75,10 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
   };
 
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={{ paddingHorizontal: 20, paddingTop: Math.max(60, insets.top + 12) }}><V10Header title="Kundestøtte" onBack={onBack} /><Text style={[v10.caption, { marginBottom: 16 }]}>SNAR AI · henvendelser til kundestøtte</Text></View>
+    <View style={{ paddingHorizontal: 20, paddingTop: Math.max(60, insets.top + 12) }}><V10Header title={t("Kundestøtte")} onBack={onBack} /><Text style={[v10.caption, { marginBottom: 16 }]}>{t(aiUnavailable ? 'Send en henvendelse til kundestøtte' : 'Chat med assistenten eller skriv til kundestøtte')}</Text></View>
     <ScrollView ref={scroll} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: !reduced })}>
-      <View style={s.chips}>{FAQ.map(question => <Pressable testID="customer-src-components-CustomerSupport-72" key={question} onPress={() => void send(question)} disabled={busy} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.95 }] }]}><Text style={{ fontSize: 12, fontFamily: font.medium, color: colors.textSecondary }}>{question}</Text></Pressable>)}</View>
+      <View style={s.chips}>{FAQ.map(question => <Pressable testID="customer-src-components-CustomerSupport-72" key={question} onPress={() => aiUnavailable ? setInput(t(question)) : void send(t(question))} disabled={busy} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.95 }] }]}><Text style={{ fontSize: 12, fontFamily: font.medium, color: colors.textSecondary }}>{t(question)}</Text></Pressable>)}</View>
+      <View style={[s.message, s.assistant, { marginBottom: 12 }]}><Text style={s.messageText}>{t('Hva trenger du hjelp med? Spør assistenten her, eller skriv til kundestøtte.')}</Text></View>
       <View style={{ gap: 10 }}>
         {messages.map((message, index) => <View key={index} style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
           {message.role === 'user' ? <View style={[s.message, { borderBottomRightRadius: 6, backgroundColor: colors.surfaceInverse }]}><Text style={[s.messageText, { color: colors.onInverse }]}>{message.text}</Text></View> : <View style={[s.message, s.assistant]}><Text style={s.messageText}>{message.text}</Text></View>}
@@ -77,16 +86,16 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
         {busy && <ActivityIndicator style={{ alignSelf: 'flex-start', marginLeft: 14 }} color={colors.accent} />}
       </View>
       {error ? <Text accessibilityRole="alert" style={s.error}>{error}</Text> : null}
-      {failed ? <View style={{ gap: 8, marginTop: 12 }}><Text style={v10.secondary}>Meldingen er beholdt. Prøv igjen, eller send henvendelsen til kundestøtte med knappen under.</Text><V10Action testID="support-retry" kind="soft" small label="Prøv AI-svaret igjen" disabled={busy} onPress={() => void send(failed, true)} /></View> : null}
+      {aiUnavailable && failed ? <View testID="support-human-fallback" style={{ gap: 12, marginTop: 16 }}><Text accessibilityLiveRegion="polite" style={v10.secondary}>{t('Assistenten svarer ikke akkurat nå. Du kan sende meldingen videre til kundestøtte.')}</Text><V10Action label={t('Send til kundestøtte')} disabled={busy} busy={busy} onPress={() => void escalate()} testID="support-human-send" /></View> : failed ? <View style={{ gap: 8, marginTop: 12 }}><Text style={v10.secondary}>{t("Meldingen din er fortsatt her. Prøv igjen, eller send den til kundestøtte.")}</Text><V10Action testID="support-retry" kind="soft" small label={t("Spør assistenten på nytt")} disabled={busy} onPress={() => void send(failed, true)} /></View> : null}
     </ScrollView>
     <View style={[s.composer, { paddingBottom: insets.bottom + 112 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <TextInput style={s.input} placeholder="Skriv til oss…" placeholderTextColor={colors.textMuted} value={input} editable={!busy} onChangeText={setInput} onSubmitEditing={() => void send()} returnKeyType="send" maxLength={4000} testID="support-message-input" />
-        <Pressable onPress={() => void send()} disabled={busy || !input.trim()} accessibilityRole="button" accessibilityLabel="Send til AI-assistent" style={({ pressed }) => [{ opacity: busy || !input.trim() ? 0.55 : 1 }, pressed && { transform: [{ scale: 0.9 }] }]} testID="support-send">
+        <TextInput style={s.input} placeholder={t('Skriv til oss…')} placeholderTextColor={colors.textMuted} value={input} editable={!busy} onChangeText={setInput} onSubmitEditing={() => aiUnavailable ? void escalate() : void send()} returnKeyType="send" maxLength={4000} testID="support-message-input" />
+        <Pressable onPress={() => aiUnavailable ? void escalate() : void send()} disabled={busy || !input.trim()} accessibilityRole="button" accessibilityLabel={t(aiUnavailable ? 'Send til kundestøtte' : 'Send til AI-assistent')} style={({ pressed }) => [{ opacity: busy || !input.trim() ? 0.55 : 1 }, pressed && { transform: [{ scale: 0.9 }] }]} testID="support-send">
           <View style={s.send}><Icon name="send" size={20} color={colors.accentOn} /></View>
         </Pressable>
       </View>
-      <Pressable style={s.escalate} disabled={busy} onPress={() => void escalate()} testID="support-escalate"><Icon name="message" size={16} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: font.semibold }}>Kontakt oss · send til et menneske</Text></Pressable>
+      <Pressable style={s.escalate} disabled={busy} onPress={() => void escalate()} testID="support-escalate"><Icon name="message" size={16} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: font.semibold }}>{t("Skriv til kundestøtte")}</Text></Pressable>
     </View>
   </KeyboardAvoidingView>;
 }

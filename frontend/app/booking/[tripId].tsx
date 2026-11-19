@@ -4,6 +4,7 @@ import { useDriverAcceptedAlert } from '@/src/lib/useDriverAcceptedAlert';
 import { storage } from '@/src/utils/storage';
 import { DriverSearchOverlay } from '@/src/components/DriverSearchOverlay';
 import { destinationProximity, driverPresence } from '@/src/lib/tripPresence';
+import { cancellationFee, cancellationTerms, cancelledTrip, CUSTOMER_CANCELLABLE_STATUSES } from '@/src/lib/customerCancellation';
 import { BlurTargetView } from 'expo-blur';
 import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
@@ -31,14 +32,14 @@ import { safetyApi, tripDriverPhotoSource, tripsApi, messagesApi } from '@/src/l
 
 const META: Record<string, { title: string; sub: string }> = {
   payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sjåfør bestilles før banken har godkjent turbeløpet' },
-  searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
+  searching: { title: 'Leter etter sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
   booking: { title: 'Bestiller for deg', sub: 'Vi finner nærmeste sjåfør' },
-  driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen live på kartet' },
+  driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen på kartet' },
   at_pickup: { title: 'Sjåføren er fremme', sub: 'Kom ut når du er klar' },
   in_trip: { title: 'Turen pågår', sub: 'God tur!' },
   arrived: { title: 'Du er fremme!', sub: 'Takk for turen' },
   cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur pågår' },
-  cancelled_by_driver: { title: 'Sjåføren måtte avbryte', sub: 'Det søkes ikke automatisk etter ny sjåfør' },
+  cancelled_by_driver: { title: 'Sjåføren måtte avbryte', sub: 'Bestill en ny tur hvis du fortsatt trenger bil' },
 };
 
 export default function BookingFlow() {
@@ -124,7 +125,7 @@ export default function BookingFlow() {
       try {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
-        if (t?.trip_id !== tripId) throw new Error('Ugyldig turreferanse.');
+        if (t?.trip_id !== tripId) throw new Error('Denne turlenken virker ikke.');
         setTrip(t);
         setNetworkIssue(false);
         if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
@@ -170,12 +171,10 @@ export default function BookingFlow() {
     if (cancelPhase.current !== 'idle') return;
     cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');
     try {
-      const preview = await tripsApi.cancelPreview(tripId!);
+      const fee = await cancellationFee(tripId!);
       if (!routeIsCurrent()) return;
-      const fee = Number(preview?.cancellation_fee ?? 0);
-      if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilkår.');
       cancelPhase.current = 'confirm';
-      Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.', [
+      Alert.alert('Avbestille tur?', cancellationTerms(fee), [
         { text: 'Behold tur', style: 'cancel', onPress: releaseCancel },
         { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
           if (!routeIsCurrent() || cancelPhase.current !== 'confirm') return;
@@ -190,7 +189,7 @@ export default function BookingFlow() {
             // A response can be lost after the server commits cancellation.
             try {
               const canonical = await tripsApi.get(tripId!);
-              if (['cancelled', 'cancelled_by_driver'].includes(canonical?.status)) {
+              if (cancelledTrip(canonical?.status)) {
                 router.replace('/(app)/home'); return;
               }
             } catch {}
@@ -253,7 +252,7 @@ export default function BookingFlow() {
     safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
       const shared = await safetyApi.shareLink(tripId!);
-      if (typeof shared?.url !== 'string' || !/^https:\/\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');
+      if (typeof shared?.url !== 'string' || !/^https:\/\//.test(shared.url)) throw new Error('Kunne ikke hente lenken til turen. Prøv igjen.');
       void safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
       await Share.share({ title: 'Følg SNAR-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
     } catch (error) { setActionError(`Kunne ikke dele turen. ${apiError(error)}`); }
@@ -274,7 +273,7 @@ export default function BookingFlow() {
     const key = `${tripId}:${trip?.driver_id || ''}`;
     if (!tripId || readyLock.current || readyAcknowledged.current === key || trip?.status !== 'at_pickup' || networkIssue) return;
     readyLock.current = true; setReadyBusy(true); setActionError(''); setPickupNotice('');
-    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Meldingen mangler leveringsbekreftelse.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
+    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Vi vet ikke ennå om meldingen kom frem.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
     catch (error) { if (routeIsCurrent()) setActionError(`Meldingen ble ikke bekreftet sendt. ${apiError(error)}`); }
     finally { readyLock.current = false; if (routeIsCurrent()) setReadyBusy(false); }
   };
@@ -311,10 +310,10 @@ export default function BookingFlow() {
   const route = trip.status === 'driver_on_way' ? (!networkIssue && driverPresence(trip).fresh ? trip.driver_pickup_geometry?.coordinates || null : null) : trip.status === 'in_trip' ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
-  const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
+  const isFinal = cancelledTrip(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
-  const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
+  const canCancel = CUSTOMER_CANCELLABLE_STATUSES.includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = trip.eta_min;
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;

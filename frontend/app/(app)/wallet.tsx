@@ -39,7 +39,7 @@ export default function Wallet() {
             <View style={s.methodIcon}><Icon name="card" size={19} color={colors.textSecondary} /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.methodTitle}>{m.type === 'vipps' ? 'Vipps' : (m.label || 'Betalingskort')}</Text>
-              <Text style={s.methodSub}>{m.last4 ? `•• ${m.last4}` : 'Koblet betalingsmåte'}</Text>
+              <Text style={s.methodSub}>{m.last4 ? `•• ${m.last4}` : 'Lagret betalingsmåte'}</Text>
             </View>
             {m.is_default ? <Text style={s.activePill}>Aktiv</Text> : null}
           </Pressable>
@@ -47,7 +47,7 @@ export default function Wallet() {
 
         <Pressable style={s.methodRow} onPress={() => router.push('/payment-methods')} testID="wallet-add-payment">
           <View style={s.methodIcon}><Icon name="plus" size={19} color={colors.accent} /></View>
-          <View style={{ flex: 1 }}><Text style={s.methodTitle}>Legg til betalingsmåte</Text><Text style={s.methodSub}>Kort og støttede wallet-metoder</Text></View>
+          <View style={{ flex: 1 }}><Text style={s.methodTitle}>Legg til betalingsmåte</Text><Text style={s.methodSub}>Kort og digitale lommebøker</Text></View>
           <Icon name="chevron-right" size={18} color={colors.textMuted} />
         </Pressable>
       </View>

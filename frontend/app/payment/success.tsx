@@ -50,7 +50,7 @@ export default function PaymentSuccess() {
       }
 
       if (active) {
-        setMessage('Betalingen er ikke bekreftet ennå. Gå tilbake til kvitteringen og sjekk på nytt — turen forblir åpen til serveren bekrefter betalingen.');
+        setMessage('Vi venter på betalingsbekreftelsen. Sjekk kvitteringen igjen om litt.');
         setState('failed');
       }
     };

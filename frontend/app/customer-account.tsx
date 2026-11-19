@@ -1,3 +1,4 @@
+import { useTranslation } from '@/src/lib/customerLanguage';
 import { CustomerPhoto } from '@/src/components/CustomerPhoto';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text, TextInput } from '@/src/components/Typography';
@@ -16,6 +17,7 @@ import { CustomerSupport } from '@/src/components/CustomerSupport';
 import { CustomerProfileDetails, type ProfileDetail } from '@/src/components/CustomerProfileDetails';
 
 export default function CustomerAccount() {
+  const { t } = useTranslation();
   useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -52,7 +54,7 @@ export default function CustomerAccount() {
     googleLock.current = true; setAppleBusy(true); setGoogleError('');
     try {
       const config = await authApi.nativeConfig();
-      if (!config.apple_enabled) throw new Error('Apple-innlogging er ikke konfigurert for dette miljøet.');
+      if (!config.apple_enabled) throw new Error('Du kan ikke logge inn med Apple akkurat nå. Bruk e-post.');
       const identity = await appleIdentity();
       if (!identity) return;
       await authApi.linkApple(identity); await refresh();
@@ -67,9 +69,9 @@ export default function CustomerAccount() {
     { section: 'Konto', icon: 'shield', label: 'Sikkerhetssenter', sub: 'Nødkontakter, deling, verifisering', onPress: () => setView('safety'), testID: 'profile-safety' },
     { section: 'Konto', icon: 'card', label: 'Betaling og kvitteringer', sub: 'Kort, digitale lommebøker og kontant', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
     { section: 'Konto', icon: 'shield', label: 'SNAR Student', sub: 'Verifiser studentstatus', onPress: () => router.push('/student'), testID: 'profile-student' },
-    { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Samtykker, data, GDPR', onPress: () => setView('privacy'), testID: 'profile-privacy' },
-    { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'AI-assistent, kontakt oss, kode/reward', onPress: () => setView('help'), testID: 'profile-help' },
-    { section: 'Konto', icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Norsk · Stor tekst · Høykontrast', onPress: () => setView('language'), testID: 'profile-language' },
+    { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Se dataene dine og les om personvern', onPress: () => router.push('/customer-data'), testID: 'profile-privacy' },
+    { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'Spør assistenten eller skriv til kundestøtte', onPress: () => setView('help'), testID: 'profile-help' },
+    { section: 'Konto', icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Språk og tilgjengelighet', onPress: () => setView('language'), testID: 'profile-language' },
     { section: 'Konto', icon: 'settings', label: 'Innstillinger', sub: 'Turvarsler, personvern og appversjon', onPress: () => router.push('/settings'), testID: 'profile-settings' },
   ];
 
@@ -83,7 +85,7 @@ export default function CustomerAccount() {
       await logout();
       router.replace('/');
     } catch {
-      setDeleteError('Kunne ikke slette kontoen akkurat nå. Prøv igjen.');
+      setDeleteError(t("Kunne ikke slette kontoen akkurat nå. Prøv igjen."));
       setDeleting(false);
     } finally { deleteLock.current = false; }
   };
@@ -96,7 +98,7 @@ export default function CustomerAccount() {
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 24, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 112 }}
       >
-        <Pressable accessibilityRole="button" accessibilityLabel="Tilbake" onPress={() => router.back()} style={{ minHeight: 48, justifyContent: "center" }}><Text>‹ Tilbake</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Tilbake")} onPress={() => router.back()} style={{ minHeight: 48, justifyContent: "center" }}><Text>{t("‹ Tilbake")}</Text></Pressable>
         <View style={s.profileHeader} testID="profile-card">
           <CustomerPhoto initials={initials} size={72} />
           <View style={{ flex: 1 }}>
@@ -105,17 +107,17 @@ export default function CustomerAccount() {
           </View>
         </View>
 
-        {<Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable>}
-        {Platform.OS === 'ios' ? <Pressable testID="profile-link-apple" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.apple_linked} onPress={() => void linkApple()} style={s.googleRow}><Text>{user?.apple_linked ? 'Apple-konto koblet' : appleBusy ? 'Kobler Apple…' : 'Koble Apple-konto'}</Text></Pressable> : null}
+        {<Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? t("Google-konto koblet") : googleBusy ? t("Kobler Google…") : t("Koble Google-konto")}</Text></Pressable>}
+        {Platform.OS === 'ios' ? <Pressable testID="profile-link-apple" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.apple_linked} onPress={() => void linkApple()} style={s.googleRow}><Text>{user?.apple_linked ? t("Apple-konto koblet") : appleBusy ? t("Kobler Apple…") : t("Koble Apple-konto")}</Text></Pressable> : null}
           {googleError ? <Text testID="profile-link-google-error" accessibilityRole="alert" style={{ color: colors.danger }}>{googleError}</Text> : null}
-        {(['Steder', 'Konto'] as const).map((section) => (
+        {([t("Steder"), t("Konto")] as const).map((section) => (
           <View key={section} style={s.section}>
-            <Text style={s.sectionTitle}>{section}</Text>
+            <Text style={s.sectionTitle}>{t(section)}</Text>
             <View style={s.menu}>
               {rows.filter((row) => row.section === section).map((r) => (
                 <Pressable key={r.label} style={s.menuRow} onPress={r.onPress} testID={r.testID}>
                   <View style={s.menuIcon}><Icon name={r.icon} size={20} color={colors.text} /></View>
-                  <View style={{ flex: 1 }}><Text style={s.menuLabel}>{r.label}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{r.sub}</Text></View>
+                  <View style={{ flex: 1 }}><Text style={s.menuLabel}>{t(r.label)}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{t(r.sub)}</Text></View>
                   <Icon name="chevron-right" size={16} color={colors.textMuted} />
                 </Pressable>
               ))}
@@ -124,7 +126,7 @@ export default function CustomerAccount() {
         ))}
 
         <Pressable style={s.logout} onPress={logout} testID="profile-logout">
-          <Text style={s.logoutText}>Logg ut</Text>
+          <Text style={s.logoutText}>{t("Logg ut")}</Text>
         </Pressable>
       </ScrollView>
       </View>}
@@ -133,8 +135,8 @@ export default function CustomerAccount() {
         <View style={s.modalBackdrop}>
           <View style={s.modalCard}>
             <View style={s.modalIcon}><Icon name="shield" size={24} color={colors.danger} /></View>
-            <Text style={s.modalTitle}>Slette kontoen din?</Text>
-            <Text style={s.modalBody}>Dette kan ikke angres. Skriv «SLETT» for å bekrefte permanent sletting.</Text>
+            <Text style={s.modalTitle}>{t("Slette kontoen din?")}</Text>
+            <Text style={s.modalBody}>{t("Dette kan ikke angres. Skriv «SLETT» for å bekrefte permanent sletting.")}</Text>
             <TextInput
               testID="profile-delete-confirm-input"
               placeholder="SLETT"
@@ -146,7 +148,7 @@ export default function CustomerAccount() {
             />
             {deleteError ? <Text style={s.deleteError}>{deleteError}</Text> : null}
             <Button
-              label="Slett konto permanent"
+              label={t("Slett konto permanent")}
               variant="danger"
               onPress={deleteAccount}
               loading={deleting}
@@ -163,7 +165,7 @@ export default function CustomerAccount() {
               style={{ marginTop: 12, alignItems: 'center' }}
               testID="profile-delete-cancel"
             >
-              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Avbryt</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 14 }}>{t("Avbryt")}</Text>
             </Pressable>
           </View>
         </View>

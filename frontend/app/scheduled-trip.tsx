@@ -32,7 +32,7 @@ export default function ScheduledTrip() {
         <View accessible accessibilityRole="adjustable" accessibilityLabel="Hentetid" accessibilityValue={{ text: time(minutes) }} accessibilityActions={[{ name: 'increment', label: 'Fem minutter senere' }, { name: 'decrement', label: 'Fem minutter tidligere' }]} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'increment') adjust(5); if (event.nativeEvent.actionName === 'decrement') adjust(-5); }} style={{ paddingHorizontal: 16, borderRadius: 14, backgroundColor: colors.cardSubtle }}><Text testID="schedule-time" style={{ fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1.4, fontVariant: ['tabular-nums'] }}>{time(minutes)}</Text></View>
         <Pressable testID="schedule-later" accessibilityRole="button" accessibilityLabel="Fem minutter senere" onPress={() => adjust(5)} style={{ minHeight: 48, justifyContent: 'center' }}><Text style={{ color: colors.textMuted, fontSize: 22, fontVariant: ['tabular-nums'] }}>{time(minutes + 5)}</Text></Pressable>
       </View>
-      <Text style={[v10.secondary, { textAlign: 'center', marginTop: 8, marginBottom: 18 }]}>Planlagte turer er ikke tilgjengelig i beta ennå. Valgt dato og tid er en forhåndsvisning. Ingen tur blir bestilt.</Text>
+      <Text style={[v10.secondary, { textAlign: 'center', marginTop: 8, marginBottom: 18 }]}>Du kan foreløpig bare bestille bil til nå. Du kan prøve datovelgeren her. Ingen tur blir bestilt.</Text>
       <V10Action label={`Planlegg ${time(minutes)}`} disabled onPress={() => {}} testID="schedule-confirm-unavailable" />
       <V10Action kind="ghost" label="Tilbake til bestilling" onPress={() => router.back()} />
     </V10Sheet>

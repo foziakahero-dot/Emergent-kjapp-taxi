@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Easing } from 'react-native';
 import { Text } from '@/src/components/Typography';
 import { useReducedMotion } from '@/src/components/Motion';
 import { colors, font, useColorTheme } from '@/src/theme';
@@ -17,12 +17,14 @@ export function BookingPrice({ amount, large = false }: { amount: number | null;
     emphasis.stopAnimation(); emphasis.setValue(0);
     if (!changed || reduced) return;
     const animation = Animated.sequence([
-      Animated.timing(emphasis, { toValue: 1, duration: 120, useNativeDriver: true }),
-      Animated.timing(emphasis, { toValue: 0, duration: 260, useNativeDriver: true }),
+      Animated.timing(emphasis, { toValue: 1, duration: 100, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(emphasis, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]);
     animation.start(); return () => animation.stop();
   }, [amount, reduced, emphasis]);
-  return <Animated.View style={{ transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.045] }) }] }}>
+  return <Animated.View style={{ opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, .78] }),
+    transform: [{ translateY: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) },
+      { scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }] }}>
     <Text accessibilityLiveRegion="polite" accessibilityLabel={amount === null ? 'Pris ikke tilgjengelig' : `Pris ${kr(amount)}`}
       style={{ fontFamily: font.bold, fontSize: large ? 32 : 19, lineHeight: large ? 40 : 26, letterSpacing: large ? -.8 : -.35, color: colors.text, fontVariant: ['tabular-nums'] }}>{amount === null ? '—' : kr(amount)}</Text>
   </Animated.View>;

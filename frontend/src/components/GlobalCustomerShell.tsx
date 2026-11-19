@@ -25,7 +25,7 @@ function JourneyIsland({ trip, stale, onPress }: { trip: ActiveTripSummary; stal
   useColorTheme();
   const labels: Record<string, string> = {
     payment_authorizing: 'Bekrefter kortreservasjon',
-    searching: 'Søker sjåfør',
+    searching: 'Leter etter sjåfør',
     booking: 'Bestiller tur',
     driver_on_way: 'Sjåfør på vei',
     at_pickup: 'Sjåføren er fremme',
@@ -78,7 +78,9 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!visible) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      router.replace('/(app)/home'); return true;
+      if (router.canGoBack()) router.back();
+      else router.replace('/(app)/home');
+      return true;
     });
     return () => sub.remove();
   }, [visible]);

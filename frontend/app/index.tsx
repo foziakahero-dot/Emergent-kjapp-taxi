@@ -60,11 +60,11 @@ export default function Index() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={[s.onboarding, { paddingTop: Math.max(96, insets.top + 48), paddingBottom: Math.max(40, insets.bottom + 6) }]} testID="onboarding">
       <KjappMark size={48} />
-      <V10Entrance><Text style={s.onboardingTitle}>Reis enkelt.{'\n'}<Text style={s.onboardingMuted}>Hele Norge.</Text></Text></V10Entrance>
+      <V10Entrance><Text style={s.onboardingTitle}>Velkommen til{'\n'}<Text style={s.onboardingMuted}>SNAR</Text></Text></V10Entrance>
       <View style={s.benefits}>
-        <V10Entrance><Benefit icon="car" title="Lokale løyvehavere" detail="Godkjente sjåfører og elbiler fra norske taxiselskaper." /></V10Entrance>
-        <V10Entrance delay={60}><Benefit icon="clock" title="Fast pris før du bestiller" detail="Ingen overraskelser. Prisen du ser er prisen du betaler." /></V10Entrance>
-        <V10Entrance delay={120}><Benefit icon="sparkles" title="Si hva du trenger" detail="Bruk SNAR AI til å utforske reisemuligheter." /></V10Entrance>
+        <V10Entrance><Benefit icon="car" title="Se ledige biler" detail="Velg hentested for å se biler i nærheten." /></V10Entrance>
+        <V10Entrance delay={60}><Benefit icon="clock" title="Se prisen før du bestiller" detail="Du ser også hva eventuell ventetid koster." /></V10Entrance>
+        <V10Entrance delay={120}><Benefit icon="sparkles" title="Si hvor du skal" detail="Du kan skrive eller lese inn adressen." /></V10Entrance>
       </View>
       <View style={s.onboardingActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/permissions')} testID="onboarding-next" style={s.primaryAction}>

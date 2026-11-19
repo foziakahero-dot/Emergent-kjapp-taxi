@@ -1,32 +1,22 @@
 import { Text, TextInput } from '@/src/components/Typography';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Linking, Modal, Platform, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
-import { Button, Loader } from '@/src/components/ui';
-import { gdprApi, settingsApi } from '@/src/lib/api';
+import { Button } from '@/src/components/ui';
+import { gdprApi } from '@/src/lib/api';
+import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, v10 } from '@/src/components/V10UI';
+import { useTranslation } from '@/src/lib/customerLanguage';
 import { useAuth } from '@/src/context/AuthContext';
-
-const TOGGLES: { key: string; label: string; sub: string }[] = [
-  { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til SNAR-turen din' },
-  { key: 'trip_updates', label: 'Turoppdateringer', sub: 'Status når sjåføren er på vei og turen endrer fase' },
-];
 
 export default function CustomerData() {
   useColorTheme();
-  const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const s = useStyles();
   const router = useRouter();
   const { logout } = useAuth();
-  const [settings, setSettings] = useState<any>(null);
-  const [settingsError, setSettingsError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const savingLock = useRef(false);
   const deleteLock = useRef(false);
   const [deleteError, setDeleteError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -48,20 +38,19 @@ export default function CustomerData() {
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const trips = Array.isArray((d as any)?.trips) ? (d as any).trips.length : 0;
-      const payments = Array.isArray((d as any)?.payments) ? (d as any).payments.length : 0;
       const dataJson = JSON.stringify(d, null, 2);
 
       // expo-sharing cannot share local file URIs on web. Keep the GDPR export
       // file-based on native so large exports never go through an Android Intent message.
       if (Platform.OS === 'web') {
-        setExportInfo('Filbasert dataeksport er tilgjengelig i SNAR-mobilappen.');
+        setExportInfo(t("Åpne SNAR på mobilen for å laste ned dataene dine."));
         return;
       }
 
+      const [{ File, Paths }, Sharing] = await Promise.all([import('expo-file-system'), import('expo-sharing')]);
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        setExportInfo('Deling er ikke tilgjengelig på denne enheten. Prøv igjen på Android eller iPhone.');
+        setExportInfo(t("Deling er ikke tilgjengelig på denne enheten. Prøv igjen på Android eller iPhone."));
         return;
       }
 
@@ -73,17 +62,17 @@ export default function CustomerData() {
       try {
         await Sharing.shareAsync(file.uri, {
           mimeType: 'application/json',
-          dialogTitle: 'Mine SNAR-data',
+          dialogTitle: t('Mine SNAR-data'),
           UTI: 'public.json',
         });
-        setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Velg hvor du vil lagre eller dele JSON-filen.`);
+        setExportInfo(t('Datafilen er klar. Velg hvor du vil lagre eller dele den.'));
       } catch (sharingError) {
-        console.warn('GDPR file sharing failed:', sharingError);
-        setExportInfo('Datafilen ble opprettet, men delingen kunne ikke åpnes. Prøv igjen.');
+
+        setExportInfo(t("Datafilen ble opprettet, men delingen kunne ikke åpnes. Prøv igjen."));
       }
     } catch (error) {
-      console.warn('GDPR export failed:', error);
-      setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
+
+      setExportInfo(t("Kunne ikke hente data akkurat nå. Prøv igjen senere."));
     } finally {
       exportLock.current = false;
       setExporting(false);
@@ -99,86 +88,35 @@ export default function CustomerData() {
       await logout();
       router.replace('/');
     } catch {
-      setDeleteError('Kunne ikke slette kontoen. Prøv igjen når forbindelsen er tilbake.');
+      setDeleteError(t("Kunne ikke slette kontoen. Prøv igjen når forbindelsen er tilbake."));
       setDeleting(false);
     } finally { deleteLock.current = false; }
   };
 
-  const loadSettings = useCallback(async () => {
-    setSettingsError('');
-    try { const response = await settingsApi.get(); setSettings(response.settings || response); }
-    catch { setSettingsError('Kunne ikke hente innstillingene. Sjekk forbindelsen og prøv igjen.'); }
-  }, []);
-  useEffect(() => { void loadSettings(); }, [loadSettings]);
-
-  const toggle = async (key: string) => {
-    if (savingLock.current || !settings) return;
-    savingLock.current = true; setSaving(true); setSettingsError('');
-    const previous = settings;
-    const next = { ...settings, [key]: !settings[key] };
-    setSettings(next);
-    try { await settingsApi.update({ [key]: next[key] }); }
-    catch { setSettings(previous); setSettingsError('Endringen ble ikke lagret. Prøv igjen når forbindelsen er tilbake.'); }
-    finally { savingLock.current = false; setSaving(false); }
-  };
-
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} style={s.back} testID="settings-back" accessibilityRole="button" accessibilityLabel="Tilbake">
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </Pressable>
-        <Text style={s.title}>Data og personvern</Text>
-      </View>
-
-      <View style={{ paddingHorizontal: 20 }}>
-        {settingsError ? <View><Text testID="settings-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{settingsError}</Text><Button testID="settings-retry" label="Prøv igjen" onPress={() => void loadSettings()} /></View> : null}
-        {!settings ? (
-          <View style={{ paddingTop: 60 }}>{!settingsError ? <Loader /> : null}</View>
-        ) : (
-          <>
-            <Text style={s.sectionTitle}>Konto</Text>
-            <Pressable accessibilityRole="button" testID="settings-account" onPress={() => router.push('/customer-account')} style={s.infoRow}><Text style={s.rowLabel}>Konto og profil</Text><Icon name="chevron-right" size={18} /></Pressable>
-            <Pressable onPress={() => router.push('/customer-notifications')} accessibilityRole="button" style={s.infoRow}><Text style={s.rowLabel}>Administrer turvarsler</Text><Icon name="chevron-right" size={18} /></Pressable>
-
-            <View style={[s.card, { marginTop: 16 }]}>
-              <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
-              <Pressable testID="customer-app-settings-110" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
-                <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
-              </Pressable>
-              <Pressable testID="customer-app-settings-113" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
-                <Text style={s.rowLabel}>Personvern</Text><Text style={s.rowValue}>Åpne</Text>
-              </Pressable>
-              <Pressable testID="customer-app-settings-116" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
-                <Text style={s.rowLabel}>Vilkår</Text><Text style={s.rowValue}>Åpne</Text>
-              </Pressable>
-            </View>
-
-            <Text style={s.sectionTitle}>Personvern og data</Text>
-            <View style={s.card}>
-              <Pressable style={s.gdprRow} onPress={exportData} disabled={exporting} testID="gdpr-export">
-                <View style={s.gdprIcon}><Icon name="file-text" size={18} color={colors.accent} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.rowLabel}>Last ned mine data</Text>
-                  <Text style={s.rowSub}>Få innsyn i dataene vi lagrer om deg (GDPR)</Text>
-                </View>
-                {exporting ? <Loader /> : <Icon name="chevron-right" size={18} color={colors.textMuted} />}
-              </Pressable>
-              {exportInfo ? <Text style={s.exportInfo} testID="gdpr-export-info">{exportInfo}</Text> : null}
-            </View>
-
-            <Pressable style={s.deleteBtn} onPress={() => setDeleteOpen(true)} testID="gdpr-delete-open">
-              <Icon name="x" size={18} color={colors.danger} />
-              <Text style={s.deleteText}>Slett konto</Text>
-            </Pressable>
-            <Text style={s.deleteHint}>Sletting fjerner kontoen din permanent. Turer anonymiseres for regnskap.</Text>
-
+  return <V10Screen dock testID="customer-data-screen"><V10Header title={t("Data og personvern")} onBack={() => router.back()} />
+    <Text style={v10.secondary}>{t("Her kan du lese om personvern, laste ned dataene dine eller slette kontoen.")}</Text>
+    <V10Section title={t("Personvern og data")}><V10Group>
+      <V10Row icon="lock" title={t("Personvernerklæring")} onPress={() => void Linking.openURL('https://kjappapp.no/personvern').catch(() => setExportInfo(t('Kunne ikke åpne lenken. Prøv igjen.')))} testID="privacy-policy" />
+      <V10Row border icon="receipt" title={exporting ? t("Henter data…") : t("Last ned mine data")} subtitle={t("Få innsyn i dataene vi lagrer om deg (GDPR)")} onPress={() => void exportData()} disabled={exporting} testID="gdpr-export" />
+    </V10Group></V10Section>
+    {exportInfo ? <Text accessibilityLiveRegion="polite" style={[v10.secondary, { marginTop: 12 }]} testID="gdpr-export-info">{exportInfo}</Text> : null}
+    <V10Section title={t("Konto")}><V10Group>
+      <V10Row icon="user" title={t("Konto og profil")} onPress={() => router.push('/customer-account')} testID="privacy-account" />
+      <V10Row border icon="bell" title={t("Administrer turvarsler")} onPress={() => router.push('/customer-notifications')} />
+      <V10Row border icon="help" title={t("Kontakt kundestøtte")} onPress={() => router.push({ pathname: '/support-chat', params: { topic: 'Personvernforespørsel' } })} />
+    </V10Group></V10Section>
+    <V10Section title={t("Om appen")}><V10Group>
+      <V10Row title={t("Versjon")} right={<Text style={v10.secondary}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text>} />
+      <V10Row border icon="receipt" title={t("Vilkår")} onPress={() => void Linking.openURL('https://kjappapp.no/vilkar').catch(() => setExportInfo(t('Kunne ikke åpne lenken. Prøv igjen.')))} />
+    </V10Group></V10Section>
+    <View style={{ marginTop: 24 }}><V10Action kind="danger" label={t("Slett konto")} onPress={() => { setDeleteError(''); setDeleteOpen(true); }} testID="gdpr-delete-open" /></View>
+    <Text style={[v10.caption, { marginTop: 12 }]}>{t("Sletting fjerner kontoen din permanent. Turer anonymiseres for regnskap.")}</Text>
             <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => setDeleteOpen(false)}>
               <View style={s.modalBackdrop}>
                 <View style={s.modalCard}>
                   <View style={s.modalIcon}><Icon name="shield" size={24} color={colors.danger} /></View>
-                  <Text style={s.modalTitle}>Slette kontoen din?</Text>
-                  <Text style={s.modalBody}>Dette kan ikke angres. Skriv «SLETT» for å bekrefte.</Text>
+                  <Text style={s.modalTitle}>{t("Slette kontoen din?")}</Text>
+                  <Text style={s.modalBody}>{t("Dette kan ikke angres. Skriv «SLETT» for å bekrefte.")}</Text>
                   <TextInput
                     testID="gdpr-delete-confirm-input"
                     placeholder="SLETT"
@@ -190,7 +128,7 @@ export default function CustomerData() {
                   />
                   {deleteError ? <Text testID="gdpr-delete-error" accessibilityRole="alert" style={{ color: colors.danger }}>{deleteError}</Text> : null}
                   <Button
-                    label="Slett konto permanent"
+                    label={t("Slett konto permanent")}
                     variant="danger"
                     onPress={deleteAccount}
                     loading={deleting}
@@ -199,36 +137,15 @@ export default function CustomerData() {
                     style={{ marginTop: 14 }}
                   />
                   <Pressable onPress={() => { setDeleteOpen(false); setConfirmText(''); }} style={{ marginTop: 12, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} testID="gdpr-delete-cancel">
-                    <Text style={{ color: colors.textMuted, fontSize: 14 }}>Avbryt</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 14 }}>{t("Avbryt")}</Text>
                   </Pressable>
                 </View>
               </View>
             </Modal>
-          </>
-        )}
-      </View>
-    </ScrollView>
-  );
+  </V10Screen>;
 }
 
 const useStyles = makeStyles((c) => ({
-  header: { paddingHorizontal: 20, paddingBottom: 16, gap: 16 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  title: { fontFamily: font.display, fontSize: 26, color: c.text },
-  sectionTitle: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 13, marginTop: 24, marginBottom: 8 },
-  card: { backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: c.line },
-  rowLabel: { color: c.text, fontFamily: font.medium, fontSize: 15 },
-  rowSub: { color: c.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16 },
-  rowValue: { color: c.textMuted, fontSize: 14 },
-  gdprRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
-  gdprIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  exportInfo: { color: c.textMuted, fontSize: 13, lineHeight: 19, paddingBottom: 14 },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, minHeight: 52, borderRadius: 14, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.line },
-  deleteText: { color: c.danger, fontFamily: font.semibold, fontSize: 15 },
-  deleteHint: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center', lineHeight: 18 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', alignItems: 'center', justifyContent: 'center', padding: 28 },
   modalCard: { width: '100%', maxWidth: 400, backgroundColor: c.elevated, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

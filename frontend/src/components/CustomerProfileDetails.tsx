@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { LanguageRow } from '@/src/components/LanguageRow';
+import { useTranslation } from '@/src/lib/customerLanguage';
 import { Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
@@ -13,6 +16,8 @@ import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 export type ProfileDetail = 'safety' | 'privacy' | 'language';
 export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { view: ProfileDetail; onBack: () => void; onDelete: () => void; onSupport: () => void }) {
   useColorTheme();
+  const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -34,13 +39,13 @@ export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { 
   return <View style={{ flex: 1 }}>
     <FigmaGradient angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
     <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><Pressable testID="customer-src-components-CustomerProfileDetails-36" style={s.back} onPress={onBack} accessibilityLabel="Tilbake" accessibilityRole="button"><Icon name="chevron-left" size={16} /></Pressable><Text style={s.title}>{title}</Text></View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><Pressable testID="customer-src-components-CustomerProfileDetails-36" style={s.back} onPress={onBack} accessibilityLabel="Tilbake" accessibilityRole="button"><Icon name="chevron-left" size={16} /></Pressable><Text style={s.title}>{t(title)}</Text></View>
       <View style={{ marginTop: 24, gap: 12 }}>
         {view === 'safety' ? <>
           <Row icon="shield" label="Nødkontakter" sub="Kontakt kundestøtte for hjelp med sikkerhet" onPress={onSupport} color={colors.accent} soft={colors.accentSoft} />
           <UnavailableToggle label="Del turen automatisk" sub="Del sanntidsposisjon med nødkontakter på hver tur" />
           <UnavailableToggle label="RideCheck innsjekk" sub="Sjekker inn ved uventede stopp på lange turer" />
-          <Row icon="shield" label="Sjåførverifisering" sub="Se foto og skilt i skjermen for din aktive tur" color={colors.online} soft="rgba(18,185,129,0.12)" />
+          <Row icon="shield" label="Sjåførverifisering" sub="Se sjåførens bilde og bilens registreringsnummer under turen" color={colors.online} soft="rgba(18,185,129,0.12)" />
           <Text style={s.note}>Automatisk deling, nødkontakter og RideCheck er ikke aktivert. Du kan dele en aktiv tur fra turskjermen.</Text>
           <Button testID="customer-src-components-CustomerProfileDetails-44" label="Nødhjelp (112)" icon={<Icon name="shield" size={16} color="#FFFFFF" />} onPress={() => void Linking.openURL('tel:112')} style={{ marginTop: 8 }} />
         </> : view === 'privacy' ? <>
@@ -59,14 +64,9 @@ export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { 
           {error ? <Text style={s.error} accessibilityRole="alert">{error}</Text> : null}
           <Text testID="customer-src-components-CustomerProfileDetails-59" style={[s.note, { marginTop: 4, textAlign: 'center', fontSize: 10 }]} onPress={() => void Linking.openURL('https://kjappapp.no/personvern')}>Les personvernerklæringen · kjappapp.no/personvern</Text>
         </> : <>
-          <Row icon="globe" label="Språk" sub="Norsk (bokmål)" onPress={() => void Linking.openSettings()} soft={colors.cardSubtle} color={colors.textSecondary} />
-          {[
-            ['Stor tekst', 'Øk tekststørrelsen'],
-            ['Høykontrast', 'Sterkere farger og kontrast'],
-            ['Haptisk respons', 'Vibrasjon ved viktige handlinger'],
-          ].map(([label, sub]) => <UnavailableToggle key={label} label={label} sub={sub} />)}
-          <Text style={s.note}>Tekststørrelse og tilgjengelighet styres av telefonens innstillinger. Egne appvalg for høykontrast og haptisk respons er ikke aktivert.</Text>
-          <Pressable testID="customer-src-components-CustomerProfileDetails-68" onPress={() => void Linking.openSettings()} style={s.outline}><Text style={{ color: colors.accent, fontFamily: font.semibold, fontSize: 14 }}>Åpne telefonens innstillinger</Text></Pressable>
+          <LanguageRow />
+          <Row icon="settings" label={t('Tilgjengelighet')} sub={t('Stor tekst')} onPress={() => router.push('/customer-accessibility')} />
+
         </>}
       </View>
     </ScrollView>
