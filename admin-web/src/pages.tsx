@@ -824,7 +824,7 @@ export function Audit() {
 }
 
 /* ----------------------------- Settings ----------------------------- */
-function TwoFactorCard() {
+export function TwoFactorCard({ enrollment = false }: { enrollment?: boolean }) {
   const status = useAsync(() => api.twofaStatus(), []);
   const [setup, setSetup] = useState<any>(null);
   const [code, setCode] = useState('');
@@ -862,31 +862,35 @@ function TwoFactorCard() {
   return (
     <Card style={{ gridColumn: '1 / -1' }}>
       <div className="section-title" style={{ marginTop: 0 }}>Kontosikkerhet</div>
-      {status.loading ? <Loader /> : status.data?.enabled ? (
+      {status.loading ? <Loader /> : status.err ? (
+        <><ErrorBanner msg={status.err} /><Btn onClick={status.reload}>Prøv igjen</Btn></>
+      ) : status.data?.enabled ? (
         <>
           <Pill status="completed" label="Totrinnsbekreftelse aktiv" />
           <div className="dim" style={{ margin: '12px 0' }}>Passord, autentiseringskode og engangskoder beskytter administratorkontoen.</div>
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 620 }}>
-            <div className="field"><label className="label">Nåværende passord</label>
-              <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-            <div className="field"><label className="label">Kode fra autentiseringsappen</label>
-              <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
-          </div>
-          <Btn onClick={disable} disabled={busy || !password || !code}>{busy ? 'Arbeider…' : 'Deaktiver 2FA'}</Btn>
+          {!status.data.required && <>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 620 }}>
+              <div className="field"><label className="label">Nåværende passord</label>
+                <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+              <div className="field"><label className="label">Kode fra autentiseringsappen</label>
+                <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+            </div>
+            <Btn onClick={disable} disabled={busy || !password || !code}>{busy ? 'Arbeider…' : 'Deaktiver 2FA'}</Btn>
+          </>}
         </>
       ) : setup ? (
         <>
-          <div className="dim" style={{ marginBottom: 12 }}>Skann QR-koden i en autentiseringsapp og skriv inn den seks-sifrede koden.</div>
+          <div className="dim" style={{ marginBottom: 12 }}>Skann QR-koden med autentiseringsappen. På samme mobil kan du legge inn nøkkelen under bildet manuelt.</div>
           <img src={setup.qr} alt="QR-kode for totrinnsbekreftelse" width={180} height={180} style={{ background: '#fff', padding: 8, borderRadius: 12 }} />
           <div className="mono" style={{ margin: '10px 0 14px', wordBreak: 'break-all' }}>{setup.secret}</div>
-          <div className="field" style={{ maxWidth: 320 }}><label className="label">Bekreftelseskode</label>
-            <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+          <div className="field" style={{ maxWidth: 320 }}><label className="label" htmlFor="enroll-code">Bekreftelseskode</label>
+            <input id="enroll-code" className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
           <Btn variant="primary" onClick={enable} disabled={busy || !code}>{busy ? 'Aktiverer…' : 'Aktiver 2FA'}</Btn>
         </>
       ) : (
         <>
           <Pill status="pending" label="Totrinnsbekreftelse er ikke aktiv" />
-          <div className="dim" style={{ margin: '12px 0' }}>Aktiver 2FA før panelet brukes med produksjonsdata.</div>
+          <div className="dim" style={{ margin: '12px 0' }}>Sett opp tofaktor for å åpne administrasjonspanelet.</div>
           <Btn variant="primary" onClick={begin} disabled={busy}>{busy ? 'Klargjør…' : 'Sett opp 2FA'}</Btn>
         </>
       )}
@@ -894,6 +898,9 @@ function TwoFactorCard() {
         <div className="strong">Reservekoder – vises bare nå</div>
         <div className="mono" style={{ marginTop: 8, lineHeight: 1.8 }}>{backupCodes.join('  ·  ')}</div>
       </div>}
+      {enrollment && status.data?.enabled && (
+        <Btn variant="primary" onClick={() => window.location.reload()}>Åpne administrasjonspanelet</Btn>
+      )}
       {msg && <div className={msg.includes('aktivert') || msg.includes('deaktivert') ? 'dim' : 'error-banner'} style={{ marginTop: 12 }}>{msg}</div>}
     </Card>
   );

@@ -33,8 +33,8 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (server) await new Promise(r => server.close(r)); });
 
-async function visit(t, handle) {
-  const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 960 } });
+async function visit(t, handle, { enrolled = () => true, width = 1440, height = 960 } = {}) {
+  const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height } });
   const unexpected = [];
   t.after(async () => { await ctx.close(); assert.deepEqual(unexpected, []); });
   await ctx.routeWebSocket('**/*', ws => ws.close());
@@ -42,7 +42,7 @@ async function visit(t, handle) {
     const req = route.request(), url = new URL(req.url());
     if (url.origin !== origin) return route.abort();
     if (!url.pathname.startsWith('/api/')) return route.continue();
-    const base = { '/api/auth/me': { role: 'superadmin', email: 'admin@example.invalid' }, '/api/admin/overview': {}, '/api/admin/settings': { default_commission: 0.15 } };
+    const base = { '/api/auth/me': { role: 'superadmin', email: 'admin@example.invalid', totp_enabled: enrolled() }, '/api/admin/overview': {}, '/api/admin/settings': { default_commission: 0.15 } };
     const response = base[url.pathname] ? ok(base[url.pathname]) : await handle(url, req);
     if (!response) { unexpected.push(`${req.method()} ${url.pathname}`); return route.abort(); }
     await route.fulfill(response);
@@ -152,4 +152,33 @@ test('approval sends the selected commission and notes, retains one-time result 
   const password = p.getByLabel('Midlertidig passord til ny løyvehaver');
   assert.equal(await password.inputValue(), 'test-only'); assert.equal(await password.getAttribute('type'), 'password');
   await p.getByRole('button', { name: 'Lukk', exact: true }).click(); assert.equal(await password.count(), 0);
+});
+
+test('mobile admin can enroll before opening the protected route and scroll the full menu', async t => {
+  let enabled = false;
+  const p = await visit(t, (url, req) => {
+    if (url.pathname === '/api/auth/2fa/status') return ok({ required: true, enabled });
+    if (url.pathname === '/api/auth/2fa/setup') return ok({ secret: 'fixture-key' });
+    if (url.pathname === '/api/auth/2fa/enable') {
+      if (req.postDataJSON().code !== '123456') return fail(400);
+      enabled = true;
+      return ok({ enabled, backup_codes: ['fixture-reserve'] });
+    }
+    if (url.pathname === queue && enabled) return list();
+  }, { enrolled: () => enabled, width: 360, height: 800 });
+  await p.getByRole('button', { name: 'Sett opp 2FA' }).click();
+  assert.equal(await p.getByRole('navigation').count(), 0);
+  await p.getByLabel('Bekreftelseskode').fill('123456');
+  await p.getByRole('button', { name: 'Aktiver 2FA' }).click();
+  await p.getByText('fixture-reserve').waitFor();
+  await p.getByRole('button', { name: 'Åpne administrasjonspanelet' }).click();
+  await empty(p).waitFor();
+  await p.getByRole('button', { name: 'Åpne meny' }).click();
+  const menu = p.locator('.sidebar-open');
+  assert.ok((await menu.boundingBox()).height >= 790);
+  const settings = menu.getByRole('link', { name: 'Innstillinger' });
+  await settings.scrollIntoViewIfNeeded();
+  await settings.click({ trial: true });
+  await menu.getByRole('link', { name: 'Løyvesøknader' }).click();
+  await p.locator('.sidebar-open').waitFor({ state: 'detached' });
 });
