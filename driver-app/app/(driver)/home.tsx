@@ -26,7 +26,7 @@ import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripRecei
 import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
 import { projectedOfferTime } from '@/src/lib/offerClock';
 
-type Loc = { lat: number; lng: number; heading?: number };
+type Loc = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 function hoursLabel(min?: number) {
   const m = min || 0;
@@ -262,7 +262,7 @@ export default function DriverHome() {
 
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         if (!active) return;
-        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading !== null && pos.coords.heading >= 0 ? pos.coords.heading : undefined };
+        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed, heading: pos.coords.heading !== null && pos.coords.heading >= 0 ? pos.coords.heading : undefined };
         gpsBlocked.current = false;
         setLoc(p);
         setError('');
@@ -283,7 +283,7 @@ export default function DriverHome() {
           },
           (u) => {
             if (!active) return;
-            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading !== null && u.coords.heading >= 0 ? u.coords.heading : undefined };
+            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, speed: u.coords.speed, heading: u.coords.heading !== null && u.coords.heading >= 0 ? u.coords.heading : undefined };
             setLoc(np);
             driverApi.location(
               np.lat,
@@ -337,7 +337,7 @@ export default function DriverHome() {
             latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
           throw new Error('SNAR fikk ikke en gyldig GPS-posisjon. Prøv igjen.');
         }
-        const nextLocation: Loc = { lat: latitude, lng: longitude, heading: heading || 0 };
+        const nextLocation: Loc = { lat: latitude, lng: longitude, speed, heading: heading || 0 };
         const recordedAt = new Date(position.timestamp).toISOString();
         let locationResult = await driverApi.location(
           latitude,

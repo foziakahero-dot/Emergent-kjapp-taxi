@@ -1,3 +1,4 @@
+import { DriverVehicleMarker } from './DriverVehicleMarker';
 import React, { useState } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import Svg, {
@@ -11,11 +12,11 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { CarShape, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 /**
  * Stylised Nordic dark "map" canvas rendered with SVG so it works identically on
@@ -126,17 +127,7 @@ export function MapCanvas({
             </G>
           ))}
 
-          {/* active trip car (smoothly animated) */}
-          {smoothCar ? (
-            <>
-              <Circle cx={px(smoothCar.lng)} cy={py(smoothCar.lat)} r={20} fill={colors.accentGlow} opacity={0.5} />
-              <G
-                transform={`translate(${px(smoothCar.lng)}, ${py(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${34 / 24}) translate(-12, -12)`}
-              >
-                <CarShape {...CAR_ACTIVE} />
-              </G>
-            </>
-          ) : null}
+
 
           {/* pickup pin */}
           {pickup ? (
@@ -164,6 +155,10 @@ export function MapCanvas({
             </G>
           ) : null}
         </Svg>
+      )}
+      {w > 0 && h > 0 && smoothCar && (
+        <DriverVehicleMarker heading={smoothCar.heading} speed={activeCar?.speed}
+          point={{ x: px(smoothCar.lng), y: py(smoothCar.lat) }} />
       )}
     </View>
   );
