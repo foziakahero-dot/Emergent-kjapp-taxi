@@ -5,9 +5,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }, _action: 'signin' | 'link' = 'signin') {
   const webClientId = String(config?.google_web_client_id || '').trim();
   const iosClientId = String(config?.google_ios_client_id || '').trim();
-  if (!webClientId) throw new Error('Google-innlogging er ikke konfigurert på SNAR-serveren ennå.');
+  if (!webClientId) throw new Error('Du kan ikke logge inn med Google akkurat nå. Bruk e-post.');
   if (Platform.OS === 'ios' && !iosClientId) {
-    throw new Error('Google-innlogging for iPhone mangler iOS-klientkonfigurasjon på SNAR-serveren.');
+    throw new Error('Du kan ikke logge inn med Google på iPhone akkurat nå. Bruk e-post.');
   }
 
   // The backend is the source of truth for the OAuth client IDs. Do not reject a
@@ -31,14 +31,14 @@ export async function googleIdentity(config: { google_web_client_id: string; goo
     if (isErrorWithCode(error)) {
       if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) throw new Error('Google Play-tjenester må oppdateres før du kan logge inn.');
       if (error.code === statusCodes.IN_PROGRESS) throw new Error('Google-innlogging pågår allerede.');
-      if (String(error.code) === '10' || String(error.code) === 'DEVELOPER_ERROR') throw new Error('Google-innlogging mangler riktig appkonfigurasjon. Kontakt SNAR.');
+      if (String(error.code) === '10' || String(error.code) === 'DEVELOPER_ERROR') throw new Error('Google-innlogging virker ikke akkurat nå. Bruk e-post eller kontakt kundestøtte.');
       if (String(error.code) === '7' || String(error.code) === 'NETWORK_ERROR') throw new Error('Kan ikke kontakte Google. Sjekk nettet og prøv igjen.');
     }
     throw new Error('Google-innloggingen kunne ikke fullføres. Prøv igjen.');
   }
   if (isCancelledResponse(result)) return null;
   if (!isSuccessResponse(result) || !result.data.idToken) {
-    throw new Error('Google returnerte ikke et gyldig innloggingstoken.');
+    throw new Error('Google kunne ikke bekrefte innloggingen. Prøv igjen.');
   }
   return result.data.idToken;
 }
@@ -54,7 +54,7 @@ export async function appleIdentity() {
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
       ],
     });
-    if (!result.identityToken) throw new Error('Apple returnerte ikke et gyldig innloggingstoken.');
+    if (!result.identityToken) throw new Error('Apple kunne ikke bekrefte innloggingen. Prøv igjen.');
     return result.identityToken;
   } catch (error: any) {
     if (error?.code === 'ERR_REQUEST_CANCELED') return null;

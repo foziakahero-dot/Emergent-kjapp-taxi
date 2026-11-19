@@ -123,7 +123,7 @@ export default function Receipt() {
         return;
       }
       const result = await paymentApi.checkout(tripId, CHECKOUT_ORIGIN);
-      if (!result?.checkout_url || !result?.session_id) throw new Error('Stripe svarte uten betalingslenke.');
+      if (!result?.checkout_url || !result?.session_id) throw new Error('Kunne ikke åpne betalingen. Prøv igjen.');
 
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') window.location.assign(result.checkout_url);

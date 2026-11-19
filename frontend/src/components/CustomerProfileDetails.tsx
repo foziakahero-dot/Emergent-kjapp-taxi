@@ -45,7 +45,7 @@ export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { 
           <Row icon="shield" label="Nødkontakter" sub="Kontakt kundestøtte for hjelp med sikkerhet" onPress={onSupport} color={colors.accent} soft={colors.accentSoft} />
           <UnavailableToggle label="Del turen automatisk" sub="Del sanntidsposisjon med nødkontakter på hver tur" />
           <UnavailableToggle label="RideCheck innsjekk" sub="Sjekker inn ved uventede stopp på lange turer" />
-          <Row icon="shield" label="Sjåførverifisering" sub="Se foto og skilt i skjermen for din aktive tur" color={colors.online} soft="rgba(18,185,129,0.12)" />
+          <Row icon="shield" label="Sjåførverifisering" sub="Se sjåførens bilde og bilens registreringsnummer under turen" color={colors.online} soft="rgba(18,185,129,0.12)" />
           <Text style={s.note}>Automatisk deling, nødkontakter og RideCheck er ikke aktivert. Du kan dele en aktiv tur fra turskjermen.</Text>
           <Button testID="customer-src-components-CustomerProfileDetails-44" label="Nødhjelp (112)" icon={<Icon name="shield" size={16} color="#FFFFFF" />} onPress={() => void Linking.openURL('tel:112')} style={{ marginTop: 8 }} />
         </> : view === 'privacy' ? <>

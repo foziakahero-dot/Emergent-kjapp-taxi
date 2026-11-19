@@ -43,7 +43,7 @@ export default function CustomerData() {
       // expo-sharing cannot share local file URIs on web. Keep the GDPR export
       // file-based on native so large exports never go through an Android Intent message.
       if (Platform.OS === 'web') {
-        setExportInfo(t("Filbasert dataeksport er tilgjengelig i SNAR-mobilappen."));
+        setExportInfo(t("Åpne SNAR på mobilen for å laste ned dataene dine."));
         return;
       }
 
@@ -94,7 +94,7 @@ export default function CustomerData() {
   };
 
   return <V10Screen dock testID="customer-data-screen"><V10Header title={t("Data og personvern")} onBack={() => router.back()} />
-    <Text style={v10.secondary}>{t("Her kan du lese personvernerklæringen, hente dine data eller be om sletting av kontoen.")}</Text>
+    <Text style={v10.secondary}>{t("Her kan du lese om personvern, laste ned dataene dine eller slette kontoen.")}</Text>
     <V10Section title={t("Personvern og data")}><V10Group>
       <V10Row icon="lock" title={t("Personvernerklæring")} onPress={() => void Linking.openURL('https://kjappapp.no/personvern').catch(() => setExportInfo(t('Kunne ikke åpne lenken. Prøv igjen.')))} testID="privacy-policy" />
       <V10Row border icon="receipt" title={exporting ? t("Henter data…") : t("Last ned mine data")} subtitle={t("Få innsyn i dataene vi lagrer om deg (GDPR)")} onPress={() => void exportData()} disabled={exporting} testID="gdpr-export" />

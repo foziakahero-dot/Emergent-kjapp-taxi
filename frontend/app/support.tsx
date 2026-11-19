@@ -27,6 +27,6 @@ export default function CustomerSupportOverview() {
     </V10Group>
     <V10Section title="Vanlige spørsmål"><V10Group>{['Hvordan fungerer fast pris?', 'Refusjon og avbestilling', 'Bedriftskonto'].map((label, index) => <V10Row key={label} border={index > 0} title={label} onPress={() => openChat(label)} />)}</V10Group></V10Section>
     <View style={{ marginTop: 20 }}><V10Action kind="ink" label="Chat med SNAR" icon="message" onPress={() => openChat()} testID="customer-support-chat-open" /></View>
-    {active.isError || history.isError ? <Text style={[v10.caption, { color: colors.textSecondary, marginTop: 12 }]}>Turinformasjonen kunne ikke oppdateres. Du kan fortsatt kontakte support.</Text> : null}
+    {active.isError || history.isError ? <Text style={[v10.caption, { color: colors.textSecondary, marginTop: 12 }]}>Vi får ikke oppdatert turen nå. Du kan fortsatt kontakte kundestøtte.</Text> : null}
   </V10Entrance></V10Screen>;
 }

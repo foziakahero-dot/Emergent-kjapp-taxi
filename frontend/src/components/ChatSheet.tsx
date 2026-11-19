@@ -94,7 +94,7 @@ export function ChatSheet({
               keyExtractor={(m, i) => m.id || String(i)}
               contentContainerStyle={{ padding: 16, gap: 10 }}
               onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-              ListEmptyComponent={<Text style={s.empty}>Ingen meldinger ennå. Si hei!</Text>}
+              ListEmptyComponent={<Text style={s.empty}>Ingen meldinger ennå.</Text>}
               renderItem={({ item }) => {
                 const mine = item.from_role === role;
                 return (

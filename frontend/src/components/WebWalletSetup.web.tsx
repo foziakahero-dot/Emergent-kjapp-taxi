@@ -19,7 +19,7 @@ export function WebWalletSetup({ disabled, onSaved }: { disabled?: boolean; onSa
     const start = async () => {
       const config = await paymentApi.nativeConfig();
       if (disposed || !container.current || !config.enabled || !config.web_wallets_enabled) return;
-      if (window.location.protocol !== 'https:') throw new Error('Wallet-betaling krever HTTPS.');
+      if (window.location.protocol !== 'https:') throw new Error('Åpne SNAR med en sikker tilkobling for å betale.');
       const stripe = await loadStripe(config.publishable_key);
       if (disposed || !container.current) return;
       if (!stripe) throw new Error('Kunne ikke starte sikker Stripe-betaling.');
@@ -41,7 +41,7 @@ export function WebWalletSetup({ disabled, onSaved }: { disabled?: boolean; onSa
           const submitted = await elements.submit();
           if (submitted.error) throw new Error(submitted.error.message);
           const setup = await paymentApi.nativeSetup(wallet, 'web');
-          if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Stripe svarte uten kortverifisering.');
+          if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Vi kunne ikke bekrefte kortet. Prøv igjen.');
           const confirmed = await stripe.confirmSetup({ elements, clientSecret: setup.client_secret,
             confirmParams: { return_url: window.location.origin + '/payment-methods' }, redirect: 'if_required' });
           if (confirmed.error) throw new Error(confirmed.error.message);

@@ -9,11 +9,11 @@ type LocationApi = {
   Accuracy: { High: number };
 };
 export const locationIssueText: Record<LocationIssue, string> = {
-  permission: 'Gi posisjonstilgang for å finne hentestedet ditt og se ledige biler i nærheten.',
-  settings: 'Tillat posisjon for SNAR i innstillingene på enheten.',
-  services: 'Posisjonstjenester er slått av. Slå dem på og prøv igjen.',
-  timeout: 'Det tok for lang tid å finne posisjonen. Prøv igjen, eller velg hentested manuelt.',
-  unavailable: 'Kunne ikke finne posisjonen. Prøv igjen, eller velg hentested manuelt.',
+  permission: 'Del posisjonen din, så kan du se ledige biler der du er.',
+  settings: 'Du kan gi SNAR tilgang til posisjonen din i telefonens innstillinger.',
+  services: 'Posisjon er slått av på telefonen. Slå den på, eller skriv inn hentestedet.',
+  timeout: 'Det tar tid å finne deg. Prøv igjen, eller skriv inn hentestedet.',
+  unavailable: 'Vi finner ikke posisjonen din. Du kan skrive inn hentestedet selv.',
 };
 
 /** A slow GPS lookup must never block manual pickup or overwrite a later choice. */

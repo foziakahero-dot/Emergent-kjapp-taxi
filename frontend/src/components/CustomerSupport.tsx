@@ -75,10 +75,10 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
   };
 
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={{ paddingHorizontal: 20, paddingTop: Math.max(60, insets.top + 12) }}><V10Header title={t("Kundestøtte")} onBack={onBack} /><Text style={[v10.caption, { marginBottom: 16 }]}>{t(aiUnavailable ? 'Send en henvendelse til kundestøtte' : 'SNAR AI · henvendelser til kundestøtte')}</Text></View>
+    <View style={{ paddingHorizontal: 20, paddingTop: Math.max(60, insets.top + 12) }}><V10Header title={t("Kundestøtte")} onBack={onBack} /><Text style={[v10.caption, { marginBottom: 16 }]}>{t(aiUnavailable ? 'Send en henvendelse til kundestøtte' : 'Chat med assistenten eller skriv til kundestøtte')}</Text></View>
     <ScrollView ref={scroll} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: !reduced })}>
       <View style={s.chips}>{FAQ.map(question => <Pressable testID="customer-src-components-CustomerSupport-72" key={question} onPress={() => aiUnavailable ? setInput(t(question)) : void send(t(question))} disabled={busy} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.95 }] }]}><Text style={{ fontSize: 12, fontFamily: font.medium, color: colors.textSecondary }}>{t(question)}</Text></Pressable>)}</View>
-      <View style={[s.message, s.assistant, { marginBottom: 12 }]}><Text style={s.messageText}>{t('Hei! Hva trenger du hjelp med? Prøv SNAR AI eller send en henvendelse til kundestøtte.')}</Text></View>
+      <View style={[s.message, s.assistant, { marginBottom: 12 }]}><Text style={s.messageText}>{t('Hva trenger du hjelp med? Spør assistenten her, eller skriv til kundestøtte.')}</Text></View>
       <View style={{ gap: 10 }}>
         {messages.map((message, index) => <View key={index} style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
           {message.role === 'user' ? <View style={[s.message, { borderBottomRightRadius: 6, backgroundColor: colors.surfaceInverse }]}><Text style={[s.messageText, { color: colors.onInverse }]}>{message.text}</Text></View> : <View style={[s.message, s.assistant]}><Text style={s.messageText}>{message.text}</Text></View>}
@@ -86,7 +86,7 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
         {busy && <ActivityIndicator style={{ alignSelf: 'flex-start', marginLeft: 14 }} color={colors.accent} />}
       </View>
       {error ? <Text accessibilityRole="alert" style={s.error}>{error}</Text> : null}
-      {aiUnavailable && failed ? <View testID="support-human-fallback" style={{ gap: 12, marginTop: 16 }}><Text accessibilityLiveRegion="polite" style={v10.secondary}>{t('AI-assistenten er ikke tilgjengelig nå. Meldingen er beholdt og er ikke sendt til kundestøtte ennå.')}</Text><V10Action label={t('Send til kundestøtte')} disabled={busy} busy={busy} onPress={() => void escalate()} testID="support-human-send" /></View> : failed ? <View style={{ gap: 8, marginTop: 12 }}><Text style={v10.secondary}>{t("Meldingen er beholdt. Prøv igjen, eller send henvendelsen til kundestøtte med knappen under.")}</Text><V10Action testID="support-retry" kind="soft" small label={t("Prøv AI-svaret igjen")} disabled={busy} onPress={() => void send(failed, true)} /></View> : null}
+      {aiUnavailable && failed ? <View testID="support-human-fallback" style={{ gap: 12, marginTop: 16 }}><Text accessibilityLiveRegion="polite" style={v10.secondary}>{t('Assistenten svarer ikke akkurat nå. Du kan sende meldingen videre til kundestøtte.')}</Text><V10Action label={t('Send til kundestøtte')} disabled={busy} busy={busy} onPress={() => void escalate()} testID="support-human-send" /></View> : failed ? <View style={{ gap: 8, marginTop: 12 }}><Text style={v10.secondary}>{t("Meldingen din er fortsatt her. Prøv igjen, eller send den til kundestøtte.")}</Text><V10Action testID="support-retry" kind="soft" small label={t("Spør assistenten på nytt")} disabled={busy} onPress={() => void send(failed, true)} /></View> : null}
     </ScrollView>
     <View style={[s.composer, { paddingBottom: insets.bottom + 112 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -95,7 +95,7 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
           <View style={s.send}><Icon name="send" size={20} color={colors.accentOn} /></View>
         </Pressable>
       </View>
-      <Pressable style={s.escalate} disabled={busy} onPress={() => void escalate()} testID="support-escalate"><Icon name="message" size={16} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: font.semibold }}>{t("Kontakt oss · send til et menneske")}</Text></Pressable>
+      <Pressable style={s.escalate} disabled={busy} onPress={() => void escalate()} testID="support-escalate"><Icon name="message" size={16} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: font.semibold }}>{t("Skriv til kundestøtte")}</Text></Pressable>
     </View>
   </KeyboardAvoidingView>;
 }

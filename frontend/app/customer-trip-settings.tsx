@@ -53,7 +53,7 @@ export default function CustomerTripSettings() {
       } else {
         const result = await safetyApi.shareLink(fresh.trip_id);
         if (!isCurrent()) return;
-        if (typeof result?.url !== 'string' || !/^https:\/\//.test(result.url)) throw new Error(t('Ingen gyldig turlenke mottatt.'));
+        if (typeof result?.url !== 'string' || !/^https:\/\//.test(result.url)) throw new Error(t('Kunne ikke hente lenken til turen. Prøv igjen.'));
         const shared = await Share.share({ title: t('Følg SNAR-turen min'), message: `${t('Følg turen min live:')} ${result.url}`, url: result.url });
         if (shared.action === Share.sharedAction) void safetyApi.log(fresh.trip_id, { kind: 'share' }).catch(() => {});
       }
@@ -61,7 +61,7 @@ export default function CustomerTripSettings() {
     finally { lock.current = false; if (isCurrent()) setBusy(false); }
   };
   return <V10Screen dock testID="customer-trip-settings-screen"><V10Header title={t(pickup ? 'Henteinstruks' : 'Del tur')} onBack={() => router.back()} />
-    {query.isPending ? <Loader /> : query.isError ? <V10State icon="wifiOff" warning title={t('Kunne ikke hente aktiv tur')} body={t('Sjekk forbindelsen og prøv igjen.')} action={t('Prøv igjen')} onAction={() => void query.refetch()} /> : !eligible ? <V10State icon={pickup ? 'inside' : 'share'} title={t(trip?.trip_id ? 'Ikke tilgjengelig i denne turfasen' : 'Ingen aktiv tur')} body={t(pickup ? 'Henteinstruks kan endres når en sjåfør er på vei eller venter ved hentestedet.' : 'Du kan dele turen når en sjåfør er på vei, ved henting og under turen.')} action={trip?.trip_id ? t('Åpne turen') : undefined} onAction={trip?.trip_id ? () => router.push(`/booking/${trip.trip_id}`) : undefined} /> : <>
+    {query.isPending ? <Loader /> : query.isError ? <V10State icon="wifiOff" warning title={t('Kunne ikke hente aktiv tur')} body={t('Sjekk forbindelsen og prøv igjen.')} action={t('Prøv igjen')} onAction={() => void query.refetch()} /> : !eligible ? <V10State icon={pickup ? 'inside' : 'share'} title={t(trip?.trip_id ? 'Dette valget er ikke tilgjengelig akkurat nå' : 'Ingen aktiv tur')} body={t(pickup ? 'Du kan gi beskjed om henting når sjåføren er på vei eller har kommet frem.' : 'Du kan dele turen når en sjåfør er på vei, ved henting og under turen.')} action={trip?.trip_id ? t('Åpne turen') : undefined} onAction={trip?.trip_id ? () => router.push(`/booking/${trip.trip_id}`) : undefined} /> : <>
       <V10Group style={{ padding: 16, gap: 8, marginBottom: 20 }}><Text style={v10.overline}>{t('Aktiv tur')}</Text><Text style={v10.body}>{trip.pickup_address}</Text><Text style={v10.secondary}>{trip.dropoff_address}</Text></V10Group>
       {pickup ? <><V10Group><V10Row icon="inside" title={t('Jeg venter inne')} subtitle={t('Gjelder bare denne turen. Du må møte sjåføren ved det avtalte hentestedet.')} right={<DesignToggle label={t('Jeg venter inne')} value={trip.pickup_waiting_inside === true} onChange={value => void perform(value)} disabled={busy || query.isError} testID="settings-waiting-inside" />} /></V10Group></> : <><Text style={[v10.secondary, { marginBottom: 16 }]}>{t('Del en lenke til den aktive turen med noen du stoler på. Lenken gir tilgang til turstatus og posisjon.')}</Text><V10Action label={t('Del turen live')} icon="share" busy={busy} onPress={() => void perform()} testID="settings-share-trip" /></>}
     </>}
