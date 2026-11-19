@@ -1,3 +1,4 @@
+import { DriverVehicleMarker } from './DriverVehicleMarker';
 import { DriverMapControls } from './DriverMapControls';
 import type { DemandCell } from '@/src/lib/demand';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
@@ -18,7 +19,7 @@ import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './InteractiveMap';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -43,11 +44,6 @@ type Props = {
   interactive?: boolean;
   navigationFollow?: boolean;
 };
-
-function MarkerCar({ car }: { car: Car; active?: boolean }) {
-  useColorTheme();
-  return <MapCar heading={car.heading || 0} />;
-}
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
   useColorTheme();
@@ -87,6 +83,7 @@ export function MapboxInteractiveMap({
   const theme = useColorTheme();
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
+  const [mapBearing, setMapBearing] = useState(0);
   const [manual, setManual] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
@@ -210,6 +207,8 @@ export function MapboxInteractiveMap({
         attributionPosition={{ left: 98, bottom: overlayBottom + 10 }}
         onDidFinishLoadingMap={() => setMapReady(true)}
         onCameraChanged={(state: any) => {
+          const heading = state?.properties?.heading;
+          if (Number.isFinite(heading)) setMapBearing(Math.round(heading));
           if (state?.gestures?.isGestureActive) setManual(true);
         }}
       >
@@ -275,13 +274,13 @@ export function MapboxInteractiveMap({
 
         {cars.map((car, index) => (
           <MarkerView key={`car-${index}`} coordinate={[car.lng, car.lat]} allowOverlap>
-            <MarkerCar car={car} />
+            <MapCar heading={(car.heading || 0) - mapBearing} />
           </MarkerView>
         ))}
 
         {smoothCar ? (
           <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap>
-            <MarkerCar car={smoothCar} active />
+            <DriverVehicleMarker heading={smoothCar.heading - mapBearing} speed={activeCar?.speed} />
           </MarkerView>
         ) : null}
 
