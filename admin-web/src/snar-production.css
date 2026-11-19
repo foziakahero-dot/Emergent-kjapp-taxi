@@ -78,3 +78,11 @@ textarea.input { height:auto; padding:10px 12px; }
 @media(max-width:1280px) { .integration-grid,.integrations-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:900px) { .sidebar { transform:translateX(-100%); width:256px; display:flex; } .sidebar.sidebar-open { transform:translateX(0); } .sidebar-backdrop { display:block; position:fixed; inset:0; background:#07182e88; border:0; z-index:29; } .sidebar-close,.mobile-menu { display:inline-flex; } .app-main { margin-left:0; } .main-content { padding:24px 20px 40px; } .topbar { padding:0 16px; } .who-email { display:none; } .control-two,.support-layout { grid-template-columns:1fr; } .app-list { max-height:420px; overflow:auto; } .live-layout .live-map-wrap { height:400px; } }
 @media(max-width:560px) { .main-content { padding:20px 14px 32px; } .global-search { width:42vw; } .topbar-right { gap:5px; } .topbar-right .avatar { display:none; } .hdr-actions { flex-wrap:wrap; } .page-hdr { align-items:flex-start; flex-wrap:wrap; } .grid.cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .integration-grid,.integrations-grid { grid-template-columns:1fr; } .pager { flex-wrap:wrap; } .kpi-value { font-size:20px; } }
+
+.admin-enrollment { width: 100%; max-width: 480px; min-width: 0; }
+.admin-enrollment h1 { font-size: 24px; }
+.admin-enrollment > .btn { margin-top: 12px; }
+@media (max-width: 900px) {
+  .app-shell .sidebar { height: 100dvh; visibility: hidden; }
+  .app-shell .sidebar-open { visibility: visible; }
+}

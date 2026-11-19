@@ -11,7 +11,7 @@ import DriverBonuses from './DriverBonuses';
 import Students from './Students';
 import Receipts from './Receipts';
 import {
-  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
+  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings, TwoFactorCard,
 } from './pages';
 import {
   FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
@@ -199,9 +199,18 @@ function Shell() {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   if (user === undefined) return <div className="auth-wrap"><Loader /></div>;
   if (!user) return <Login />;
+  if (!user.totp_enabled) return (
+    <main className="auth-wrap">
+      <section className="admin-enrollment">
+        <h1>Aktiver tofaktor for SNAR Admin</h1>
+        <TwoFactorCard enrollment />
+        <button className="btn btn-ghost" onClick={logout}>Logg ut</button>
+      </section>
+    </main>
+  );
   return <Shell />;
 }
 

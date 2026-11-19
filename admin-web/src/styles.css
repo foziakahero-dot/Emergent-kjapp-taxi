@@ -224,13 +224,13 @@ tbody tr.click:hover { background: var(--panel-2); }
 
 @media (max-width: 820px) {
   .shell { display: flex; flex-direction: column; min-height: 100dvh; height: 100dvh; }
-  .sidebar { flex: none; height: 58px; flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden;
+  .shell .sidebar { flex: none; height: 58px; flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden;
     border-right: 0; border-bottom: 1px solid var(--line); }
-  .sidebar .brand { position: sticky; left: 0; z-index: 2; flex: none; padding: 8px 12px; margin: 0;
+  .shell .sidebar .brand { position: sticky; left: 0; z-index: 2; flex: none; padding: 8px 12px; margin: 0;
     background: var(--panel); border-right: 1px solid var(--line); }
-  .sidebar .brand-name, .nav-group-title, .sidebar > div[style] { display: none; }
-  .nav-group { display: flex; flex: none; padding: 4px 2px; }
-  .nav-item { flex: none; white-space: nowrap; margin: 0; padding: 8px 10px; font-size: 12px; }
+  .shell .sidebar .brand-name, .shell .nav-group-title, .shell .sidebar > div[style] { display: none; }
+  .shell .nav-group { display: flex; flex: none; padding: 4px 2px; }
+  .shell .nav-item { flex: none; white-space: nowrap; margin: 0; padding: 8px 10px; font-size: 12px; }
   .main { flex: 1; min-height: 0; }
   .content { padding: 18px 16px 36px; }
   .live-columns { grid-template-columns: minmax(0, 1fr); }
