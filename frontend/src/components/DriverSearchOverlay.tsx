@@ -29,9 +29,9 @@ export function DriverSearchOverlay({ trip, busy, error, offline, onCancel, onDe
       <View style={{ width: 140, height: 140, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator testID="driver-search-spinner" size="large" color={colors.accent} style={{ transform: [{ scale: 2.2 }] }} /></View>
       <Text accessibilityLiveRegion="polite" style={{ fontFamily: font.semibold, fontSize: 24, textAlign: 'center', color: colors.text }}>Finner nærmeste sjåfør…</Text>
       <Text testID="driver-search-seconds" style={{ fontVariant: ['tabular-nums'], fontSize: 24, color: colors.textSecondary }}>{elapsed} sekunder</Text>
-      <Text style={{ textAlign: 'center', color: colors.textSecondary }}>Vi gir deg beskjed når en sjåfør har bekreftet.</Text>
-      {elapsed === 60 ? <Text accessibilityLiveRegion="polite">Bekrefter avslutning av søket…</Text> : null}
-      {offline ? <Text accessibilityRole="alert" style={{ textAlign: 'center' }}>Venter på kontakt med SNAR. Søket avsluttes på serveren etter 60 sekunder.</Text> : null}
+      <Text style={{ textAlign: 'center', color: colors.textSecondary }}>Du får beskjed når en sjåfør tar turen.</Text>
+      {elapsed === 60 ? <Text accessibilityLiveRegion="polite">Sjekker om søket er avsluttet …</Text> : null}
+      {offline ? <Text accessibilityRole="alert" style={{ textAlign: 'center' }}>Venter på forbindelse. Søket avsluttes automatisk etter 60 sekunder.</Text> : null}
       {error ? <Text accessibilityRole="alert" style={{ color: colors.danger, textAlign: 'center' }}>{error}</Text> : null}
       <Pressable testID="driver-search-cancel" accessibilityRole="button" disabled={busy} onPress={onCancel} style={{ minHeight: 56, minWidth: 200, borderRadius: 18, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
         <Text style={{ color: '#FFFFFF', fontFamily: font.semibold, fontSize: 17 }}>{busy ? 'Avbryter…' : 'Avbryt søk'}</Text>

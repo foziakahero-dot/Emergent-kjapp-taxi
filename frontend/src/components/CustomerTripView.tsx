@@ -85,7 +85,7 @@ export function CustomerTripView(p: Props) {
         <V10SearchIndicator bar />
         <CustomerJourney pickup={p.trip.pickup_address || 'Valgt hentested'} destination={p.trip.dropoff_address} />
         <View style={{ marginVertical: 16 }}><AvailabilityStatus search={p.available} trip={p.trip} /></View>
-        {p.offline ? <Text testID="search-trip-offline" accessibilityRole="alert" style={v10.caption}>Mangler fersk turstatus. Søket fortsetter på serveren.</Text> : null}
+        {p.offline ? <Text testID="search-trip-offline" accessibilityRole="alert" style={v10.caption}>Vi får ikke oppdatert status akkurat nå. Søket etter sjåfør fortsetter.</Text> : null}
         <V10Action kind="ghost" label="Avbryt søk" onPress={p.onCancel} disabled={!p.canCancel} busy={p.cancelBusy} testID="searching-cancel" />
       </> : cancelled ? <>
         <V10State icon={noDriver ? 'vehicle' : 'x'} title={noDriver ? 'Ingen sjåfører tilgjengelig akkurat, prøv igjen senere' : status === 'cancelled_by_driver' ? 'Sjåføren måtte avbryte' : 'Turen ble avbrutt'} body={noDriver ? 'Søket ble avsluttet etter 60 sekunder.' : 'Ingen aktiv tur pågår. Du kan starte en ny bestilling.'} />
@@ -93,7 +93,7 @@ export function CustomerTripView(p: Props) {
         <View style={{ marginTop: 20 }}><V10Action label={noDriver ? 'Prøv igjen' : 'Tilbake til hjem'} onPress={p.onHome} testID="booking-home" /></View>
       </> : status === 'driver_on_way' ? guide ? <>
         <Text style={v10.caption}>{p.distance || 'Henteveiledning'}</Text><Text style={[v10.title, { marginTop: 2 }]}>Mot hentestedet</Text>
-        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center', padding: 14, borderRadius: 18, backgroundColor: colors.cardSubtle, marginTop: 16 }}><View style={[v10.icon, { backgroundColor: colors.surface }]}><V10Icon name="walk" size={20} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.pickup_address || 'Avtalt hentested'}</Text><Text style={v10.caption}>Følg gangveiledningen til det avtalte hentestedet.</Text></View></View>
+        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center', padding: 14, borderRadius: 18, backgroundColor: colors.cardSubtle, marginTop: 16 }}><View style={[v10.icon, { backgroundColor: colors.surface }]}><V10Icon name="walk" size={20} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.pickup_address || 'Avtalt hentested'}</Text><Text style={v10.caption}>Følg kartet til hentestedet.</Text></View></View>
         <Text style={[v10.overline, { marginTop: 18, marginBottom: 8 }]}>Se etter</Text><DriverCard p={p} compact />
         <View style={{ marginTop: 16 }}><Contacts p={p} /></View><View style={{ marginTop: 10 }}><V10Action kind="ink" label="Åpne gangveiledning" onPress={p.onWalk} testID="pickup-walking-directions" /><V10Action kind="ghost" label="Tilbake" onPress={() => setGuide(false)} /></View>
       </> : <>
@@ -109,11 +109,11 @@ export function CustomerTripView(p: Props) {
         {p.trip.waiting_policy ? <Text style={[v10.caption, { marginTop: 12 }]} testID="pickup-waiting-policy">{p.trip.waiting_policy.free_minutes} min gratis ventetid. Deretter {kr(p.trip.waiting_policy.per_minute)}/min, maks {kr(p.trip.waiting_policy.max_fee)}.</Text> : null}
         {p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} testID="assigned-trip-cancel" /> : null}
       </> : status === 'in_trip' && proximity?.near ? <>
-        <View testID="customer-arriving-view" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}><View style={{ flex: 1 }}><Text style={v10.caption}>Nesten fremme</Text><Text style={v10.title}>{p.trip.dropoff_address || 'Reisemålet ditt'}</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, fontVariant: ['tabular-nums'] }}>{proximity.meters}<Text style={v10.secondary}> m</Text></Text></View><Text style={[v10.caption, { marginTop: 4 }]}>Omtrentlig avstand i luftlinje fra siste ferske GPS-posisjon.</Text>
+        <View testID="customer-arriving-view" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}><View style={{ flex: 1 }}><Text style={v10.caption}>Nesten fremme</Text><Text style={v10.title}>{p.trip.dropoff_address || 'Reisemålet ditt'}</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, fontVariant: ['tabular-nums'] }}>{proximity.meters}<Text style={v10.secondary}> m</Text></Text></View><Text style={[v10.caption, { marginTop: 4 }]}>Avstanden er målt i luftlinje fra bilens sist kjente posisjon.</Text>
         <Text style={[v10.secondary, { marginTop: 8 }]}>{p.trip.payment_flow === 'cash' ? 'Betal kontant direkte til sjåføren etter turen.' : p.trip.payment_flow === 'reservation' ? 'Turbeløpet trekkes automatisk etter at sjåføren avslutter turen.' : 'Sjåføren avslutter turen før betaling og kvittering åpnes.'}</Text>
-        <View style={{ marginTop: 18 }}><V10Action kind="ink" label="Venter på sjåførens avslutning" disabled onPress={() => {}} testID="customer-arrival-driver-authority" /></View><View style={{ marginTop: 10 }}><V10Action small kind="soft" label="Minimer turen" onPress={p.onMinimize} testID="active-trip-minimize" /><V10Action small kind="ghost" label="Sikkerhet" onPress={p.onSafety} testID="ontrip-safety" /></View>
+        <View style={{ marginTop: 18 }}><V10Action kind="ink" label="Venter på at sjåføren avslutter turen" disabled onPress={() => {}} testID="customer-arrival-driver-authority" /></View><View style={{ marginTop: 10 }}><V10Action small kind="soft" label="Minimer turen" onPress={p.onMinimize} testID="active-trip-minimize" /><V10Action small kind="ghost" label="Sikkerhet" onPress={p.onSafety} testID="ontrip-safety" /></View>
       </> : status === 'in_trip' ? <>
-        <DriverCard p={p} compact />{network}<View style={{ marginTop: 14 }}><V10Action small kind="soft" icon="chevD" label="Minimer — turen følger deg" onPress={p.onMinimize} testID="active-trip-minimize" /></View>
+        <DriverCard p={p} compact />{network}<View style={{ marginTop: 14 }}><V10Action small kind="soft" icon="chevD" label="Vis kartet" onPress={p.onMinimize} testID="active-trip-minimize" /></View>
       </> : <V10State icon="trip" title="Oppdaterer turstatus" body="Venter på bekreftet status fra SNAR." />}
     </V10Sheet>
   </View>;

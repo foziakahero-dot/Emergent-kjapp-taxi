@@ -17,7 +17,7 @@ import { colors, font, useColorTheme } from '@/src/theme';
 
 const liveLabels: Record<string, string> = {
   payment_authorizing: 'Venter på kortgodkjenning',
-  searching: 'Søker sjåfør',
+  searching: 'Leter etter sjåfør',
   booking: 'Bestiller',
   driver_on_way: 'Sjåfør på vei',
   at_pickup: 'Sjåføren er fremme',
@@ -122,7 +122,7 @@ export default function History() {
       {CUSTOMER_CANCELLABLE_STATUSES.includes(live.status) ? <ActivityTripCancellation key={`${user?.id}:${liveId}`} tripId={liveId} searching={searching} onRefresh={refreshAfterCancellation} /> : null}
     </V10Group> : null}
     {active.isError ? <Text style={v10.caption}>Kunne ikke oppdatere aktiv tur.</Text> : null}
-    {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !past.length ? !live ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Gjennomførte og avbrutte turer vises her." action="Til hjem" onAction={() => router.navigate('/(app)/home')} /></View> : null : groups.map(group => <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
+    {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !past.length ? !live ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Her finner du turene dine etter hvert som du reiser." action="Til hjem" onAction={() => router.navigate('/(app)/home')} /></View> : null : groups.map(group => <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
       const id = trip.trip_id || trip.id;
       const cancelled = cancelledTrip(trip.status);
       const date = new Date(trip.created_at);
@@ -130,7 +130,7 @@ export default function History() {
       return <Pressable key={id || index} accessibilityRole="button" testID={`trip-${id || 'unknown'}`} disabled={!id} onPress={() => router.push(`/customer-trip/${encodeURIComponent(id)}` as any)} style={{ minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8 }}>
         {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
         <View style={v10.icon}><V10Icon name={cancelled ? 'x' : 'destination'} size={20} /></View>
-        <View style={{ flex: 1, gap: 4 }}><Text style={v10.body} numberOfLines={2}>{trip.dropoff_address || 'SNAR-tur'}</Text><Text style={v10.caption}>{Number.isFinite(date.getTime()) ? date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', timeZone: 'Europe/Oslo' }) + ' ' + date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' }) : 'Dato mangler'} · {vehicleMeta(trip.vehicle_type || 'ai-first').name}</Text><V10Badge tone={cancelled ? 'critical' : trip.payment_status === 'paid' ? 'neutral' : 'warning'}>{label}</V10Badge></View>
+        <View style={{ flex: 1, gap: 4 }}><Text style={v10.body} numberOfLines={2}>{trip.dropoff_address || 'SNAR-tur'}</Text><Text style={v10.caption}>{Number.isFinite(date.getTime()) ? date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', timeZone: 'Europe/Oslo' }) + ' ' + date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' }) : 'Ukjent dato'} · {vehicleMeta(trip.vehicle_type || 'ai-first').name}</Text><V10Badge tone={cancelled ? 'critical' : trip.payment_status === 'paid' ? 'neutral' : 'warning'}>{label}</V10Badge></View>
         {!cancelled ? <Text style={v10.body}>{kr(trip.price)}</Text> : null}
       </Pressable>;
     })}</V10Group></V10Section>)}

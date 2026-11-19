@@ -7,7 +7,7 @@ import { driverPresence } from '@/src/lib/tripPresence';
 export function useTripSpeech(trip: any, offline: boolean) {
   const { voiceSupport } = useAccessibilityPreferences();
   const previous = useRef('');
-  const labels: Record<string, string> = { searching: 'Søker sjåfør.', booking: 'Bestiller tur.', driver_on_way: 'Sjåføren er på vei.', at_pickup: 'Sjåføren er fremme.', in_trip: 'Turen pågår.' };
+  const labels: Record<string, string> = { searching: 'Leter etter sjåfør.', booking: 'Bestiller tur.', driver_on_way: 'Sjåføren er på vei.', at_pickup: 'Sjåføren er fremme.', in_trip: 'Turen pågår.' };
   const fresh = driverPresence(trip).fresh;
   const eta = trip?.status === 'driver_on_way' && fresh && typeof trip.eta_min === 'number' && Number.isFinite(trip.eta_min) && trip.eta_min > 0 ? Math.ceil(trip.eta_min) : null;
   const plate = typeof trip?.driver?.plate === 'string' && trip.driver_id ? trip.driver.plate : '';

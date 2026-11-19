@@ -25,7 +25,7 @@ export default function CustomerMessages() {
   const trip = active.data;
   if (!active.isError && trip?.trip_id && trip?.driver_id && chatStatuses.has(trip.status)) return <Conversation key={trip.trip_id} trip={trip} focused={focused} />;
   return <V10Screen dock testID="customer-messages-screen"><V10Header title="Meldinger" />
-    <View style={{ marginTop: 24 }}>{active.isPending ? <Loader label="Henter reisestatus…" /> : active.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente reisestatus" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void active.refetch()} /> : <V10State icon="message" title="Ingen aktive samtaler" body={trip && ['searching', 'booking', 'payment_authorizing'].includes(trip.status) ? 'Samtalen blir tilgjengelig når en sjåfør er tildelt turen din.' : 'Når en sjåfør er tildelt din aktive tur, vises samtalen her.'} action="Til hjem" onAction={() => router.navigate('/(app)/home')} />}</View>
+    <View style={{ marginTop: 24 }}>{active.isPending ? <Loader label="Henter reisestatus…" /> : active.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente reisestatus" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void active.refetch()} /> : <V10State icon="message" title="Ingen aktive samtaler" body={trip && ['searching', 'booking', 'payment_authorizing'].includes(trip.status) ? 'Du kan skrive til sjåføren når noen har tatt turen.' : 'Her kan du skrive til sjåføren når noen har tatt turen.'} action="Til hjem" onAction={() => router.navigate('/(app)/home')} />}</View>
   </V10Screen>;
 }
 function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
@@ -58,7 +58,7 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       if (!preset) setDraft(previous => previous.trim() === text ? '' : previous);
       await qc.invalidateQueries({ queryKey: ['customer-trip-messages', trip.trip_id] });
-    } catch { setError('Meldingen ble ikke bekreftet sendt. Kontroller samtalen før du prøver igjen.'); }
+    } catch { setError('Vi vet ikke om meldingen kom frem. Sjekk samtalen før du sender på nytt.'); }
     finally { lock.current = false; setSending(false); }
   };
   return <KeyboardAvoidingView testID="customer-messages-conversation" style={{ flex: 1, backgroundColor: colors.bg, paddingTop: Math.max(56, insets.top + 8) }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

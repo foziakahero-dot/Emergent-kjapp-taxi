@@ -46,7 +46,7 @@ export function PaymentPreferenceSection({ userId, cashEnabled, cardEnabled, con
   return <V10Section title="Foretrukket betaling">
     <V10Group>
       {option('card', 'Kort og digital lommebok', cardEnabled ? 'Bruk verifisert standardkort eller lagret lommebok' : 'Kortbetaling er ikke tilgjengelig nå', cardEnabled)}
-      {option('cash', 'Kontant', !configReady ? 'Henter tilgjengelighet…' : cashEnabled ? 'Betal direkte til sjåføren etter turen' : 'Kontantbetaling er ikke tilgjengelig nå', cashEnabled)}
+      {option('cash', 'Kontant', !configReady ? 'Sjekker betalingsmåter …' : cashEnabled ? 'Betal direkte til sjåføren etter turen' : 'Kontantbetaling er ikke tilgjengelig nå', cashEnabled)}
     </V10Group>
     <Text style={[v10.caption, { marginTop: 10 }]}>Lagres på denne enheten for kontoen din. Du kan endre betalingsmåte før hver bestilling.</Text>
     {preference.failed || error ? <Text testID="payment-preference-error" accessibilityRole="alert" style={[v10.secondary, { marginTop: 8, color: colors.danger }]}>{error || 'Kunne ikke hente lagret betalingsvalg. Velg på nytt.'}</Text> : null}

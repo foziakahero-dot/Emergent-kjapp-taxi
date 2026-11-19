@@ -3,7 +3,6 @@ import { SheetFrame, SheetHandle } from './snar10/Sheet';
 import { WebWalletSetup } from '@/src/components/WebWalletSetup';
 import { ApplePaySetupButton } from '@/src/components/ApplePaySetupButton';
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
-import { ExperienceStudio, type StudioOption } from './ExperienceStudio';
 import { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 export { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 import { FigmaGradient } from './FigmaGradient';
@@ -48,17 +47,10 @@ type Props = {
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
 const vehicleNames: Record<string, string> = Object.fromEntries(Object.entries(CUSTOMER_VEHICLE_ART).map(([id, art]) => [id, art.label]));
-const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const [homeHeight, setHomeHeight] = useState(500);
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const studioOptions: StudioOption[] = [
-    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta(vehicleNames['ai-first'], p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
-    { id: 'comfort', label: 'Pusterom', icon: 'moon', title: 'Et lite pusterom.', sub: 'Comfort · ikke tilgjengelig', body: 'Comfort er ikke tilgjengelig for bestilling ennå.', disabled: true },
-    { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
-  ];
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
   const pickupOption = p.pickupOptions?.[p.vehicle];
   const pickupSummary = pickupOption ? pickupEstimate(pickupOption)
@@ -71,11 +63,11 @@ export function CustomerBookingView(p: Props) {
     Fastprisen inkluderer mva{validVehiclePrice(stopFee) ? ` og ${kr(stopFee)} for ekstra stopp` : ''}.{confirmedWaitingPolicy(p.waitingPolicy) && p.waitingPolicy.max_fee > 0 ? ' Venting utover inkludert tid kan koste ekstra.' : ''}
   </Text> : null;
   const locationActions = <View style={{ marginVertical: 12, gap: 6 }}>
-    <Text style={v10.secondary}>{p.locationHint || 'Gi posisjonstilgang for å finne hentestedet ditt og se ledige biler i nærheten.'}</Text>
+    <Text style={v10.secondary}>{p.locationHint || 'Del posisjonen din, så kan du se ledige biler der du er.'}</Text>
     <V10Action testID="home-enable-location" label={p.locationActionLabel || 'Gi tilgang til posisjon'} icon="locate" busy={p.locationBusy} onPress={p.onLocate} />
-    <V10Action kind="ghost" small testID={p.destination ? 'route-manual-pickup' : 'home-location-required'} label="Velg hentested manuelt" onPress={() => p.onSearch('pickup')} />
+    <V10Action kind="ghost" small testID={p.destination ? 'route-manual-pickup' : 'home-location-required'} label="Skriv inn hentested" onPress={() => p.onSearch('pickup')} />
   </View>;
-  const sheet = (children: React.ReactNode, home = false) => <SheetFrame key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} style={{ maxHeight: home && !preferencesOpen ? '42%' : '70%' }}><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
+  const sheet = (children: React.ReactNode, home = false) => <SheetFrame key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} style={{ maxHeight: home ? '42%' : '70%' }}><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
     style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
     onLayout={event => { p.onHeight(event.nativeEvent.layout.height); if (home) setHomeHeight(event.nativeEvent.layout.height); }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: home ? Math.max(108, insets.bottom + 74) : Math.max(34, insets.bottom) }}>
     <Pressable testID="home-search-toggle" accessibilityRole="button" accessibilityLabel="Minimer til kart" disabled={!p.onMinimize} onPress={p.onMinimize} hitSlop={8}><SheetHandle /></Pressable>{children}</ScrollView></SheetFrame>;
@@ -83,12 +75,12 @@ export function CustomerBookingView(p: Props) {
   const error = p.error ? <Text accessibilityRole="alert" testID="home-error" style={[v10.secondary, { color: colors.danger, marginVertical: 12 }]}>{p.error}</Text> : null;
   if (!p.destination) return <>
     <V10Entrance testID="home-header" style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-      <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><V10Glass target={p.mapBlurTarget} /><V10CustomerAvatar initials={p.initials} version={p.avatarVersion} /><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>Hei, {p.firstName}</Text></Pressable>
+      <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><V10Glass target={p.mapBlurTarget} /><V10CustomerAvatar initials={p.initials} version={p.avatarVersion} /><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>{p.firstName ? `Hei, ${p.firstName.charAt(0).toLocaleUpperCase('nb-NO')}${p.firstName.slice(1)}` : 'Min konto'}</Text></Pressable>
       <Tool id="home-notifications" icon="bell" label="Varsler" onPress={p.onNotifications || p.onProfile} target={p.mapBlurTarget} />
     </V10Entrance>
     {p.locationReady ? <View style={{ position: 'absolute', right: 20, bottom: homeHeight + 20, gap: 8 }}><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} target={p.mapBlurTarget} /></View> : null}
     {sheet(<>
-      <Pressable testID="home-where-to" accessibilityRole="button" accessibilityLabel="Søk etter destinasjon" onPress={() => p.onSearch('dropoff')} style={styles.search}><V10Icon name="search" /><Text style={[v10.body, { flex: 1, fontSize: 18 }]}>Hvor skal du?</Text><Pressable testID="home-schedule" accessibilityRole="button" accessibilityLabel="Velg hentetid" disabled={!p.onSchedule} onPress={event => { event.stopPropagation(); p.onSchedule?.(); }} style={styles.now}><V10Icon name="clock" size={16} /><Text style={v10.caption}>Nå</Text></Pressable></Pressable>
+      <Pressable testID="home-where-to" accessibilityRole="button" accessibilityLabel="Søk etter reisemål" onPress={() => p.onSearch('dropoff')} style={styles.search}><V10Icon name="search" /><Text style={[v10.body, { flex: 1, fontSize: 18 }]}>Hvor skal du?</Text><Pressable testID="home-schedule" accessibilityRole="button" accessibilityLabel="Velg hentetid" disabled={!p.onSchedule} onPress={event => { event.stopPropagation(); p.onSchedule?.(); }} style={styles.now}><V10Icon name="clock" size={16} /><Text style={v10.caption}>Nå</Text></Pressable></Pressable>
       {!p.locationReady ? locationActions : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
         {p.places.map((place, i) => <Pressable key={place.id || `${place.name}-${i}`} testID={`quick-${place.label || i}`} onPress={() => p.onPlace(place)} accessibilityRole="button" style={styles.chip}><V10Icon name={place.label === 'Hjem' ? 'home' : place.label === 'Jobb' ? 'work' : place.icon === 'clock' ? 'clock' : 'destination'} size={18} /><Text style={v10.secondary} numberOfLines={1}>{place.label || place.name}</Text></Pressable>)}
@@ -96,8 +88,7 @@ export function CustomerBookingView(p: Props) {
       </ScrollView>
       {p.locationReady ? p.availability : null}
       {p.placesIssue ? <Pressable testID="home-places-retry" onPress={p.onRetryPlaces}><Text testID="home-places-error" style={[v10.caption, { marginTop: 8 }]}>Kunne ikke oppdatere faste steder. Prøv igjen.</Text></Pressable> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}><Pressable testID="home-ai-help" accessibilityRole="button" onPress={p.onVoice} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={v10.caption}>✦ AI-hjelp</Text></Pressable><Pressable testID="home-preferences" accessibilityRole="button" accessibilityState={{ expanded: preferencesOpen }} onPress={() => setPreferencesOpen(value => !value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={v10.caption}>Reisepreferanser</Text></Pressable></View>
-      {preferencesOpen ? <ExperienceStudio product="customer" value={p.vehicle} options={studioOptions} onApply={value => { p.onVehicle(value); return true; }} onContinue={() => p.onSearch('dropoff')} /> : null}
+      <Pressable testID="home-ai-help" accessibilityRole="button" onPress={p.onVoice} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={v10.caption}>Bestill med tekst eller tale</Text></Pressable>
       {error}</>, true)}
   </>;
   return <><View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20 }}><Tool id="booking-back" icon="chevL" label="Tilbake" onPress={back} target={p.mapBlurTarget} /></View>
@@ -105,15 +96,15 @@ export function CustomerBookingView(p: Props) {
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><Info title="Kjøretøy" value={vehicleName} /><Info title="Betaling" value={!p.payment && p.cashEnabled ? 'Velg betalingsmåte' : paymentLabel(p.payment)} onPress={() => { p.onReview(false); p.onStage('payment'); }} /></View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}><Text style={v10.secondary}>Turpris</Text><BookingPrice amount={validVehiclePrice(p.price) ? p.price : null} large /></View>
       {priceDetails}{pickupStatus}
-      {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Text testID="waiting-policy-notice" style={v10.secondary}>Ventetid: {p.waitingPolicy.free_minutes} min inkludert, deretter {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text><Text style={[v10.caption, { marginTop: 6 }]}>{p.payment?.type === 'cash' ? 'Betal turpris og eventuell avtalt ventetid kontant direkte til sjåføren etter turen. Ingen kortbelastning.' : `Reserverer opptil ${kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} ${p.payment?.type === 'vipps' ? 'med Vipps/MobilePay' : 'på kortet'}. Bare turpris og faktisk ventetid trekkes; resten frigjøres.`}</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
+      {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Text testID="waiting-policy-notice" style={v10.secondary}>Ventetid: {p.waitingPolicy.free_minutes} min inkludert, deretter {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text><Text style={[v10.caption, { marginTop: 6 }]}>{p.payment?.type === 'cash' ? 'Du betaler turen og eventuell ventetid kontant til sjåføren etter turen.' : `Reserverer opptil ${kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} ${p.payment?.type === 'vipps' ? 'med Vipps/MobilePay' : 'på kortet'}. Du betaler bare for turen og eventuell ventetid. Resten av reservasjonen frigjøres.`}</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vi får ikke hentet prisen for ventetid akkurat nå.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
     </> : p.stage === 'route' ? <><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
       {p.travelDetails}
       {!p.locationReady ? locationActions : null}
       {error}<View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 56 }}><Pressable testID="route-adjust-pickup" accessibilityRole="button" accessibilityLabel="Juster hentested" onPress={() => p.onSearch('pickup')} style={{ height: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="pickup" /></Pressable></View><View style={{ flex: 1 }}><V10Action testID="route-choose-vehicle" label="Velg bil" disabled={!p.canReview} onPress={() => p.onStage('vehicles')} /></View></View>
-    </> : p.stage === 'vehicles' ? <><Text style={[v10.title, { marginBottom: 4 }]}>Velg reisen din</Text><Text style={[v10.secondary, { marginBottom: 16 }]}>Fast pris før du bestiller</Text>
-      <Text testID="booking-price-updates" accessibilityLiveRegion="polite" style={[v10.caption, { marginBottom: 10 }]}>{p.quoteFresh === false ? 'Oppdaterer prisene… Vent på et nytt tilbud før bestilling.' : 'Prisene oppdateres automatisk før bestilling. Du bekrefter alltid gjeldende pris.'}</Text>
+    </> : p.stage === 'vehicles' ? <><Text style={[v10.title, { marginBottom: 4 }]}>Velg bil</Text><Text style={[v10.secondary, { marginBottom: 16 }]}>Fast pris før du bestiller</Text>
+      <Text testID="booking-price-updates" accessibilityLiveRegion="polite" style={[v10.caption, { marginBottom: 10 }]}>{p.quoteFresh === false ? 'Henter ny pris …' : 'Du ser prisen før du bekrefter turen.'}</Text>
       <View style={{ gap: 6 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type} fresh={p.quoteFresh !== false}
         option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)}
         pickup={p.pickupOptions ? p.pickupOptions[choice.type] ?? null : undefined} onSelect={p.onVehicle} />)}</View>
@@ -140,7 +131,7 @@ export function CustomerBookingView(p: Props) {
       </View>
       {p.businessEnabled && p.businessName && p.onBusinessSetup ? <V10Action kind="ghost" small label="Endre bedriftskort" onPress={p.onBusinessSetup} disabled={p.busy} testID="booking-edit-business-card" /> : null}
       <View style={{ marginTop: 12 }}><V10Action testID="booking-add-payment" kind="soft" small icon="plus" label="Legg til betalingsmåte" onPress={p.onPayment} /></View>
-      <Text style={[v10.caption, { marginTop: 12 }]}>{p.payment?.type === 'cash' ? 'Ha kontantbeløpet klart. Sjåføren registrerer mottatt betaling etter turen.' : p.payment?.type === 'vipps' ? 'Betalingen bekreftes i Vipps/MobilePay før sjåførsøket starter.' : p.payment?.type === 'business' ? 'Du får kvittering med bedriftens navn og organisasjonsnummer etter betaling.' : 'Turen reserveres på den verifiserte betalingsmåten under Betalingsmåter.'}</Text>
+      <Text style={[v10.caption, { marginTop: 12 }]}>{p.payment?.type === 'cash' ? 'Betal sjåføren kontant når turen er over.' : p.payment?.type === 'vipps' ? 'Betalingen bekreftes i Vipps/MobilePay før sjåførsøket starter.' : p.payment?.type === 'business' ? 'Du får kvittering med bedriftens navn og organisasjonsnummer etter betaling.' : 'Turen reserveres på den verifiserte betalingsmåten under Betalingsmåter.'}</Text>
       <V10Action testID="booking-payment-done" kind="ghost" label="Tilbake til bilvalg" onPress={() => p.onStage('vehicles')} />{error}</>)}
   </>;
 }
