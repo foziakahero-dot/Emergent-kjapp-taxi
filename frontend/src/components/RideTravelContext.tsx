@@ -55,7 +55,7 @@ function FlightContext({ direction, userId }: { direction: 'A' | 'D'; userId?: s
         busy={query.isFetching} testID="travel-flight-search" />
     </View>
     {lookup && query.isError ? <Text style={v10.caption}>Flystatus er midlertidig utilgjengelig.</Text> : null}
-    {lookup && query.isSuccess && !flight ? <Text style={v10.caption}>Fant ikke flyet i Avinors flyliste for valgt dag.</Text> : null}
+    {lookup && query.isSuccess && !flight ? <Text style={v10.caption}>Fant ikke flyet denne dagen. Sjekk flynummeret og datoen.</Text> : null}
     {lookup && flight ? <View testID="travel-flight-result" style={{ gap: 4 }}>
       <Text style={v10.body}>{flight.number} · {flightStatuses[flight.status_code] || 'Planlagt'} · {flight.other_airport || 'OSL'}</Text>
       <Text style={v10.secondary}>Rutetid {clock(flight.scheduled_at)}{flight.estimated_at ? ` · ${flight.status_code === 'A' || flight.status_code === 'D' ? 'Faktisk' : 'Oppdatert'} ${dateAndTime(flight.estimated_at)}` : ''}</Text>
@@ -103,7 +103,7 @@ function CalendarContext({ driveMinutes, destination }: { driveMinutes: number; 
       subtitle={`${dateAndTime(event.start)} · ${event.location}`} onPress={() => setSelected(event)} testID={`travel-calendar-event-${index}`} />)}
     {selected && leaveAt !== null ? <View style={{ gap: 4 }} testID="travel-calendar-suggestion">
       <Text style={v10.body}>{leaveAt > Date.now() ? `Foreslått avreise ${dateAndTime(leaveAt)}` : 'Dra så snart du er klar'}</Text>
-      <Text style={v10.caption}>For valgt rute til {destination}, basert på estimert kjøretid nå og 15 min margin. Sjekk at reisemålet stemmer med {selected.location}.</Text>
+      <Text style={v10.caption}>Til {destination} har vi regnet med dagens kjøretid og 15 minutter ekstra. Sjekk at reisemålet stemmer med {selected.location}.</Text>
     </View> : null}
   </View>;
 }
@@ -126,13 +126,13 @@ export function RideTravelContext({ userId, pickup, destination, driveMinutes, p
   const estimatedDrive = typeof driveMinutes === 'number' && Number.isFinite(driveMinutes) && driveMinutes > 0;
   return <V10Group style={{ marginBottom: 12, padding: 12, gap: 6, backgroundColor: colors.cardSubtle, boxShadow: 'none' }}>
     {forecast && precipitation ? <Text style={v10.caption} testID="travel-weather">{precipitation} ved hentestedet den neste timen · {forecast.degrees_c} °C · MET Norge</Text> : null}
-    {allowTransit ? <V10Action small kind="soft" label={compare ? 'Oppdater kollektivruter' : 'Sammenlign med kollektiv'} busy={transit.isFetching}
+    {allowTransit ? <V10Action small kind="soft" label={compare ? 'Oppdater kollektivruter' : 'Sammenlign med kollektivtransport'} busy={transit.isFetching}
       onPress={() => { if (compare) void transit.refetch(); else setCompare(true); }} testID="travel-transit-compare" /> : null}
     {compare && transit.isError ? <Text style={v10.caption}>Entur er midlertidig utilgjengelig.</Text> : null}
-    {compare && transit.isSuccess && !alternatives.length ? <Text style={v10.caption}>Fant ingen aktuelle kollektivavganger. Oppdater for å søke på nytt.</Text> : null}
+    {compare && transit.isSuccess && !alternatives.length ? <Text style={v10.caption}>Fant ingen avganger for denne ruten. Prøv igjen.</Text> : null}
     {compare && alternatives.slice(0, 2).map((option: any) => <View key={`${option.departure_at}:${option.line}:${option.arrival_at}`} style={{ gap: 2 }}>
       <Text style={v10.body}>{travelModes[option.mode] || 'Kollektiv'} {option.line || ''} · kl. {clock(option.departure_at)}</Text>
-      <Text style={v10.caption}>{option.departure_stop || 'Valgt rute'} · fremme kl. {clock(option.arrival_at)}{option.transfers ? ` · ${option.transfers} bytte` : ''} · {option.realtime ? 'Sanntid' : 'Rutetid'} fra Entur</Text>
+      <Text style={v10.caption}>{option.departure_stop || 'Valgt rute'} · fremme kl. {clock(option.arrival_at)}{option.transfers ? ` · ${option.transfers} ${option.transfers === 1 ? 'bytte' : 'bytter'}` : ''} · {option.realtime ? 'Sanntid' : 'Rutetid'} fra Entur</Text>
     </View>)}
     {compare && !!alternatives.length ? <>
       {estimatedDrive && typeof price === 'number' ? <Text style={v10.secondary}>SNAR · {Math.ceil(driveMinutes)} min kjøring · {kr(price)}</Text> : null}

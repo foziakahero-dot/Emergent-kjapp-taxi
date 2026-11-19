@@ -30,7 +30,7 @@ export default function ProfileSetup() {
     <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 64, paddingBottom: insets.bottom + 32 }}>
       <KjappMark size={44} />
       <Rise><Text style={s.title}>Sett opp profilen</Text></Rise>
-      <Rise><Text style={s.sub}>Så vi kan gjøre hver tur raskere for deg.</Text></Rise>
+      <Rise><Text style={s.sub}>Velg hvordan du vil betale, og lagre adresser du bruker ofte.</Text></Rise>
       <View style={{ marginTop: 32, gap: 20 }}>
         <DesignField label="Navn" value={user?.fullName || ''} placeholder="Fornavn Etternavn" editable={false} testID="setup-name" />
         <View>

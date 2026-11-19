@@ -223,7 +223,7 @@ export default function Home() {
   }, []);
 
   const locationActionLabel = locationIssue === 'settings' && Platform.OS !== 'web' ? 'Åpne posisjonsinnstillinger'
-    : !locationIssue || locationIssue === 'permission' || locationIssue === 'settings' ? 'Gi tilgang til posisjon' : 'Prøv posisjon igjen';
+    : !locationIssue || locationIssue === 'permission' || locationIssue === 'settings' ? 'Gi tilgang til posisjon' : 'Finn posisjonen min';
   const locationHint = locationSettingsError ? 'Kunne ikke åpne innstillingene. Du kan velge hentested manuelt.'
     : locationIssue ? locationIssueText[locationIssue] : locationIssueText.permission;
   const locate = async () => {
@@ -267,7 +267,7 @@ export default function Home() {
       }),
       publish: result => { setQuote(result); setQuoteError(''); },
       stale: () => { setQuoteFresh(false); setQuoteError('Oppdaterer prisen før du kan bestille.'); },
-      fail: () => setQuoteError('Kunne ikke oppdatere prisen. Vi prøver automatisk igjen. Du må ha en oppdatert pris før bestilling.'),
+      fail: () => setQuoteError('Vi får ikke hentet prisen akkurat nå. Vi prøver igjen.'),
     });
     const subscription = AppState.addEventListener('change', state => refresh.setActive(state === 'active'));
     return () => { refresh.stop(); subscription.remove(); };
@@ -288,7 +288,7 @@ export default function Home() {
     if (bookingLock.current || previous.vehicle !== selType || previous.key === null || selectedTerms === null || previous.key === selectedTerms) return;
     setReviewing(false);
     setBookingStage('vehicles');
-    setError('Tilbudet er oppdatert. Kontroller prisen og bekreft turen på nytt.');
+    setError('Prisen er oppdatert. Se over den før du bekrefter.');
   }, [selType, selectedTerms]);
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
@@ -313,7 +313,7 @@ export default function Home() {
     if (bookingLock.current || activeTrip || !activeTripChecked || activeTripOffline) return;
     if (!dropoff) return;
     if (!locationReady && !selectedPickup) {
-        setError('Velg hentested manuelt, eller del posisjonen din før du bestiller.');
+        setError('Skriv inn hentested, eller del posisjonen din før du bestiller.');
       return;
     }
     if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= QUOTE_MAX_AGE_MS || !estimate || selectedTerms === null) {
@@ -321,7 +321,7 @@ export default function Home() {
       return;
     }
     if (!confirmedWaitingPolicy(waitingPolicy)) {
-      setError('Vilkårene for ventetid kunne ikke bekreftes. Oppdater tilbudet.');
+      setError('Vi får ikke hentet prisen for ventetid akkurat nå. Oppdater tilbudet.');
       return;
     }
     if (!payMethod) {
@@ -382,7 +382,7 @@ export default function Home() {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
       } else if (e?.response?.status === 409) {
-        setError('En bestilling behandles allerede. SNAR sjekker den aktive turen automatisk.');
+        setError('Vi sjekker om du allerede har en tur.');
       } else {
         setError(apiError(e));
       }
@@ -398,7 +398,7 @@ export default function Home() {
   const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && quoteFresh && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
   const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy));
   const selectedPrice = priceFor(selType);
-  const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
+  const firstName = user?.fullName?.trim().split(/\s+/)[0] || '';
   const initials = (user?.fullName || 'SNAR').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
   return (
@@ -425,7 +425,7 @@ export default function Home() {
       {activeTrip ? <View testID="home-active-card" onLayout={e => setActiveCardHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
         <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
         {searchingTrip ? <AvailabilityStatus search={available} trip={activeTrip} /> : null}
-      </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
+      </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Vi får ikke sjekket om du har en tur. Prøv igjen om litt.</Text></View> : null}
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} quoteFresh={quoteFresh} vehicle={selType} price={selectedPrice}
@@ -475,7 +475,7 @@ export default function Home() {
         {!(locationReady || selectedPickup) ? <View style={{ padding: 12, borderRadius: 16, backgroundColor: colors.surface, gap: 8 }}>
           <Text style={v10.secondary}>{locationHint}</Text>
           <V10Action testID="map-enable-location" label={locationActionLabel} busy={locationBusy} small onPress={() => void locate()} />
-          <V10Action kind="ghost" label="Velg hentested manuelt" small onPress={() => { setSearchTarget('pickup'); setSearchOpen(true); }} />
+          <V10Action kind="ghost" label="Skriv inn hentested" small onPress={() => { setSearchTarget('pickup'); setSearchOpen(true); }} />
         </View> : <AvailabilityStatus compact search={available} />}
       </View> : null}
       {!activeTrip ? <SearchSheet

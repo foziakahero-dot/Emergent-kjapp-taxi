@@ -25,7 +25,7 @@ function JourneyIsland({ trip, stale, onPress }: { trip: ActiveTripSummary; stal
   useColorTheme();
   const labels: Record<string, string> = {
     payment_authorizing: 'Bekrefter kortreservasjon',
-    searching: 'Søker sjåfør',
+    searching: 'Leter etter sjåfør',
     booking: 'Bestiller tur',
     driver_on_way: 'Sjåfør på vei',
     at_pickup: 'Sjåføren er fremme',

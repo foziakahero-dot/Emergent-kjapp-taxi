@@ -6,7 +6,7 @@ import { paymentApi } from './api';
 export type NativeWallet = { kind: 'google' | 'apple'; label: string };
 function assertPaymentConfig(config: any) {
   const prefix = config.test_mode ? 'pk_test_' : 'pk_live_';
-  if (!config.enabled || !config.publishable_key?.startsWith(prefix)) throw new Error('Betaling er ikke aktivert i dette miljøet.');
+  if (!config.enabled || !config.publishable_key?.startsWith(prefix)) throw new Error('Denne betalingsmåten er ikke tilgjengelig her ennå.');
 }
 
 /**
@@ -46,7 +46,7 @@ export async function setupNativePaymentMethod(walletRequired = false): Promise<
   if (walletRequired && !wallet) throw new Error('Lommeboken er ikke tilgjengelig på denne enheten. Legg til et kort i stedet.');
 
   const setup = await paymentApi.nativeSetup(walletRequired && wallet ? wallet.kind === 'google' ? 'google_pay' : 'apple_pay' : undefined);
-  if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Stripe svarte uten kortverifisering.');
+  if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Vi kunne ikke bekrefte kortet. Prøv igjen.');
   let result;
   if (walletRequired && wallet?.kind === 'google') {
     result = await confirmPlatformPaySetupIntent(setup.client_secret, { googlePay: {
@@ -84,7 +84,7 @@ export async function payNative(tripId: string): Promise<boolean | null> {
   assertPaymentConfig(config);
   const wallet = await nativeWalletAvailability(config);
   const intent = await paymentApi.nativeIntent(tripId);
-  if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');
+  if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Vi kunne ikke hente betalingsinformasjonen. Prøv igjen.');
   const initialized = await initPaymentSheet({
     merchantDisplayName: 'SNAR', paymentIntentClientSecret: intent.client_secret,
     returnURL: `kjapp://receipt/${encodeURIComponent(tripId)}`, allowsDelayedPaymentMethods: false,

@@ -8,7 +8,7 @@ import { colors, font, useColorTheme } from '@/src/theme';
 export const LIVE_TRIP_STATUSES = ['searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip'];
 export function ActiveTripCard({ trip, onOpen, offline = false }: { trip: any; onOpen: () => void; offline?: boolean }) {
   useColorTheme();
-  const labels: Record<string, string> = { payment_authorizing: 'Godkjenn kortreservasjonen', searching: 'Søker sjåfør', booking: 'Bestiller', driver_on_way: 'Sjåfør på vei', at_pickup: 'Sjåføren er fremme', in_trip: 'Turen pågår', arrived: 'Se kvittering og betaling' };
+  const labels: Record<string, string> = { payment_authorizing: 'Godkjenn kortreservasjonen', searching: 'Leter etter sjåfør', booking: 'Bestiller', driver_on_way: 'Sjåfør på vei', at_pickup: 'Sjåføren er fremme', in_trip: 'Turen pågår', arrived: 'Se kvittering og betaling' };
   const eta = typeof trip?.eta_min === 'number' ? trip.eta_min : NaN;
   const staleLocation = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && !driverPresence(trip).fresh;
   const subtitle = offline ? 'Venter på oppdatert turstatus' : staleLocation ? 'Venter på oppdatert sjåførposisjon'

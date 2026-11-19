@@ -50,7 +50,7 @@ export default function BusinessBilling() {
       action="Prøv igjen" onAction={() => { void profile.refetch(); void methods.refetch(); }} />
     : profile.data?.enabled !== true ? <V10State icon="work" title="Bedriftskort er utilgjengelig" body="Bruk en tilgjengelig betalingsmåte i bestillingen." />
     : <View style={{ gap: 12 }}>
-      <Text style={v10.secondary}>Knytt et verifisert kort til jobbturer. Etter betaling får du en kvittering med bedriftens navn og organisasjonsnummer.</Text>
+      <Text style={v10.secondary}>Velg et kort til jobbturer. Bedriftens navn og organisasjonsnummer kommer på kvitteringen.</Text>
       <Text style={v10.body}>Organisasjonsnummer</Text>
       <TextInput accessibilityLabel="Organisasjonsnummer" keyboardType="number-pad" maxLength={9} value={value}
         onChangeText={text => setOrg(text.replace(/\D/g, ''))} placeholder="9 sifre" placeholderTextColor={colors.textMuted}

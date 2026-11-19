@@ -32,14 +32,14 @@ import { safetyApi, tripDriverPhotoSource, tripsApi, messagesApi } from '@/src/l
 
 const META: Record<string, { title: string; sub: string }> = {
   payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sjåfør bestilles før banken har godkjent turbeløpet' },
-  searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
+  searching: { title: 'Leter etter sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
   booking: { title: 'Bestiller for deg', sub: 'Vi finner nærmeste sjåfør' },
-  driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen live på kartet' },
+  driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen på kartet' },
   at_pickup: { title: 'Sjåføren er fremme', sub: 'Kom ut når du er klar' },
   in_trip: { title: 'Turen pågår', sub: 'God tur!' },
   arrived: { title: 'Du er fremme!', sub: 'Takk for turen' },
   cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur pågår' },
-  cancelled_by_driver: { title: 'Sjåføren måtte avbryte', sub: 'Det søkes ikke automatisk etter ny sjåfør' },
+  cancelled_by_driver: { title: 'Sjåføren måtte avbryte', sub: 'Bestill en ny tur hvis du fortsatt trenger bil' },
 };
 
 export default function BookingFlow() {
@@ -125,7 +125,7 @@ export default function BookingFlow() {
       try {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
-        if (t?.trip_id !== tripId) throw new Error('Ugyldig turreferanse.');
+        if (t?.trip_id !== tripId) throw new Error('Denne turlenken virker ikke.');
         setTrip(t);
         setNetworkIssue(false);
         if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
@@ -252,7 +252,7 @@ export default function BookingFlow() {
     safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
       const shared = await safetyApi.shareLink(tripId!);
-      if (typeof shared?.url !== 'string' || !/^https:\/\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');
+      if (typeof shared?.url !== 'string' || !/^https:\/\//.test(shared.url)) throw new Error('Kunne ikke hente lenken til turen. Prøv igjen.');
       void safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
       await Share.share({ title: 'Følg SNAR-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
     } catch (error) { setActionError(`Kunne ikke dele turen. ${apiError(error)}`); }
@@ -273,7 +273,7 @@ export default function BookingFlow() {
     const key = `${tripId}:${trip?.driver_id || ''}`;
     if (!tripId || readyLock.current || readyAcknowledged.current === key || trip?.status !== 'at_pickup' || networkIssue) return;
     readyLock.current = true; setReadyBusy(true); setActionError(''); setPickupNotice('');
-    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Meldingen mangler leveringsbekreftelse.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
+    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Vi vet ikke ennå om meldingen kom frem.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
     catch (error) { if (routeIsCurrent()) setActionError(`Meldingen ble ikke bekreftet sendt. ${apiError(error)}`); }
     finally { readyLock.current = false; if (routeIsCurrent()) setReadyBusy(false); }
   };

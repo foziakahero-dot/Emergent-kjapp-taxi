@@ -27,7 +27,7 @@ const PRIMARY_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
   if (type === 'trygg') return { name: 'SNAR XL', tagline: 'Mer plass' };
-  if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
+  if (type === 'premium') return { name: 'Premium', tagline: 'Ekstra komfort' };
   return { name: 'SNAR', tagline: 'Rask og enkel' };
 }
 
@@ -99,7 +99,7 @@ export default function Assist() {
   const resolvePickup = async (): Promise<Place | null> => {
     const perm = await Location.requestForegroundPermissionsAsync();
     if (perm.status !== 'granted') {
-      add({ role: 'assistant', content: 'Posisjon er nødvendig for å bruke nåværende sted som hentepunkt. Slå på posisjon og prøv igjen.' });
+      add({ role: 'assistant', content: 'Vil du bli hentet der du er? Gi SNAR tilgang til posisjonen din.' });
       return null;
     }
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -144,7 +144,7 @@ export default function Assist() {
     if (hasFutureRideTime(originalText)) {
       add({
         role: 'assistant',
-        content: 'Planlagte turer er ikke aktivert i SNAR-backenden ennå. Jeg bestiller derfor ikke denne som en tur nå. Du kan fortsatt be om en bil nå.',
+        content: 'Du kan foreløpig bare bestille bil til nå. Jeg har ikke bestilt noen tur.',
       });
       requestLock.current = false; setSending(false);
       return;
@@ -159,9 +159,9 @@ export default function Assist() {
       const places = normalizePlaces(r?.results || []);
       setResults(places);
       if (!places.length) {
-        add({ role: 'assistant', content: `Jeg fant ikke et sikkert treff for «${destinationQuery}». Prøv et mer presist sted eller adresse.` });
+        add({ role: 'assistant', content: `Jeg fant ikke en adresse som passer til «${destinationQuery}». Prøv med gatenavn og husnummer.` });
       } else {
-        add({ role: 'assistant', content: `Hentested: ${pickupPlace.name}. Velg riktig «${destinationQuery}»-treff, så henter jeg ekte pris og ETA.` });
+        add({ role: 'assistant', content: `Hentested: ${pickupPlace.name}. Hvilket treff er riktig for «${destinationQuery}»? Velg det for å se pris og beregnet hentetid.` });
       }
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
@@ -182,8 +182,8 @@ export default function Assist() {
       const r = await placesApi.search(q);
       const places = normalizePlaces(r?.results || []);
       setResults(places);
-      if (!places.length) add({ role: 'assistant', content: 'Ingen sikre treff. Prøv et mer presist gatenavn eller sted.' });
-      else add({ role: 'assistant', content: 'Velg riktig sted før jeg henter pris og ETA.' });
+      if (!places.length) add({ role: 'assistant', content: 'Fant ingen adresser som passer. Prøv med gatenavn og husnummer.' });
+      else add({ role: 'assistant', content: 'Velg reisemålet for å se pris og beregnet hentetid.' });
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
     } finally {
@@ -267,7 +267,7 @@ export default function Assist() {
     setInput('');
     if (hasFutureRideTime(text) && (step !== 'chat' || /bestill|book|taxi|kjør|kjor|hent|reise/i.test(text))) {
       add({ role: 'user', content: text });
-      add({ role: 'assistant', content: 'Planlagte turer er ikke aktivert i SNAR-backenden ennå. Velg en vanlig bestilling for en bil nå.' });
+      add({ role: 'assistant', content: 'Du kan foreløpig bare bestille bil til nå.' });
       return;
     }
 
@@ -331,7 +331,7 @@ export default function Assist() {
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!alive.current || sequence !== voiceGeneration.current) return;
-      if (!permission.granted) { setError('Mikrofontilgang må være aktivert for talebestilling.'); return; }
+      if (!permission.granted) { setError('Gi SNAR tilgang til mikrofonen for å bestille med stemmen.'); return; }
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
       if (!alive.current || sequence !== voiceGeneration.current) { await setAudioModeAsync({ allowsRecording: false }); return; }
