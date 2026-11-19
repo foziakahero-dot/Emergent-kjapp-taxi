@@ -152,7 +152,7 @@ export default function SavedPlaces() {
             ))}
 
             {!places.length && !adding ? (
-              <Text style={s.empty}>Lagre stedene du reiser til ofte for bestilling med ett trykk.</Text>
+              <Text style={s.empty}>Lagre adresser du bruker ofte, så slipper du å søke neste gang.</Text>
             ) : null}
 
             {adding ? (

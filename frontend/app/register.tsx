@@ -57,7 +57,7 @@ export default function Register() {
   const fieldStyle = { minHeight: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, flexDirection: 'row' as const, alignItems: 'center' as const };
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: Math.max(70, insets.top + 22), paddingBottom: Math.max(40, insets.bottom + 6) }}>
-      <V10Header onBack={() => router.back()} /><Text style={v10.title}>Opprett konto</Text><Text style={[v10.secondary, { marginTop: 6 }]}>Reis enkelt med SNAR.</Text>
+      <V10Header onBack={() => router.back()} /><Text style={v10.title}>Opprett konto</Text><Text style={[v10.secondary, { marginTop: 6 }]}>Opprett en konto for å bestille turer.</Text>
       <View style={{ marginTop: 28, gap: 8 }}>
         <View style={fieldStyle}><TextInput testID="register-name" accessibilityLabel="Fullt navn" placeholder="Fullt navn" autoComplete="name" value={fullName} onChangeText={setFullName} editable={!busy} placeholderTextColor={colors.textMuted} style={inputStyle} /></View>
         <View style={fieldStyle}><TextInput testID="register-email" accessibilityLabel="E-post" placeholder="deg@epost.no" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" value={email} onChangeText={setEmail} editable={!busy} placeholderTextColor={colors.textMuted} style={inputStyle} /></View>

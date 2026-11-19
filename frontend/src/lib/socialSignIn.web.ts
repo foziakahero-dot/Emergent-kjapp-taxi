@@ -8,7 +8,7 @@ let pending = false;
 export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }, _action: 'signin' | 'link' = 'signin'): Promise<string | null> {
   if (pending) throw new Error('Google-innlogging pågår allerede.');
   const clientId = String(config?.google_web_client_id || '').trim();
-  if (!clientId) throw new Error('Google-innlogging er ikke konfigurert på SNAR-serveren ennå.');
+  if (!clientId) throw new Error('Du kan ikke logge inn med Google akkurat nå. Bruk e-post.');
   // Reserve the popup in the click handler, before config/network/PKCE awaits.
   const windowName = 'snar-google-auth';
   const popup = window.open('', windowName, 'width=500,height=700');

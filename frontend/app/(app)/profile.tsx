@@ -38,7 +38,7 @@ export default function Profile() {
       <V10Row border icon="settings" title={t("Innstillinger")} onPress={() => router.push('/settings')} testID="profile-settings" />
       <V10Row border icon="help" title={t("Support")} onPress={() => router.push('/support')} testID="profile-help" />
       <V10Row border icon="message" title={t("Meldinger")} onPress={() => router.push('/(app)/messages')} testID="profile-messages" />
-      <V10Row border icon="ai" title={t('AI-chat for hjelp')} onPress={() => router.push('/support-chat')} testID="profile-ai-help" />
+      <V10Row border icon="ai" title={t('Spør SNAR-assistenten')} onPress={() => router.push('/support-chat')} testID="profile-ai-help" />
     </V10Group></V10Section>
   </V10Entrance></V10Screen>;
 }

@@ -54,7 +54,7 @@ export default function CustomerAccount() {
     googleLock.current = true; setAppleBusy(true); setGoogleError('');
     try {
       const config = await authApi.nativeConfig();
-      if (!config.apple_enabled) throw new Error('Apple-innlogging er ikke konfigurert for dette miljøet.');
+      if (!config.apple_enabled) throw new Error('Du kan ikke logge inn med Apple akkurat nå. Bruk e-post.');
       const identity = await appleIdentity();
       if (!identity) return;
       await authApi.linkApple(identity); await refresh();
@@ -69,8 +69,8 @@ export default function CustomerAccount() {
     { section: 'Konto', icon: 'shield', label: 'Sikkerhetssenter', sub: 'Nødkontakter, deling, verifisering', onPress: () => setView('safety'), testID: 'profile-safety' },
     { section: 'Konto', icon: 'card', label: 'Betaling og kvitteringer', sub: 'Kort, digitale lommebøker og kontant', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
     { section: 'Konto', icon: 'shield', label: 'SNAR Student', sub: 'Verifiser studentstatus', onPress: () => router.push('/student'), testID: 'profile-student' },
-    { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Samtykker, data, GDPR', onPress: () => router.push('/customer-data'), testID: 'profile-privacy' },
-    { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'AI-assistent, kontakt oss, kode/reward', onPress: () => setView('help'), testID: 'profile-help' },
+    { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Se dataene dine og les om personvern', onPress: () => router.push('/customer-data'), testID: 'profile-privacy' },
+    { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'Spør assistenten eller skriv til kundestøtte', onPress: () => setView('help'), testID: 'profile-help' },
     { section: 'Konto', icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Språk og tilgjengelighet', onPress: () => setView('language'), testID: 'profile-language' },
     { section: 'Konto', icon: 'settings', label: 'Innstillinger', sub: 'Turvarsler, personvern og appversjon', onPress: () => router.push('/settings'), testID: 'profile-settings' },
   ];

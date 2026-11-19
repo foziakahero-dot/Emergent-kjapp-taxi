@@ -173,7 +173,7 @@ test('English account shortcuts use the canonical place key and open support cha
  assert.equal(home.props.title,'Home');
  assert.equal(home.props.subtitle,'Min adresse');
  assert.match(work.props.subtitle,/one tap/);
- assert.equal(help.props.title,'AI support chat');
+ assert.equal(help.props.title,'Ask the SNAR assistant');
  await act(async()=>{home.props.onPress();help.props.onPress();});
  assert.deepEqual(JSON.parse(JSON.stringify(navigations.slice(-2))),[{pathname:'/saved-places',params:{label:'Hjem'}},'/support-chat']);
  await page.close();
