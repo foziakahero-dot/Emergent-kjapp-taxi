@@ -1,14 +1,15 @@
+import { DriverVehicleMarker } from './DriverVehicleMarker';
 import { DriverMapControls } from './DriverMapControls';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { CarShape, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; speed?: number | null };
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -216,14 +217,6 @@ export function TileMap({
               </G>
             ))}
 
-            {smoothCar ? (
-              <>
-                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${36 / 24}) translate(-12, -12)`}>
-                  <CarShape {...CAR_ACTIVE} />
-                </G>
-              </>
-            ) : null}
 
             {pickup ? (
               <G>
@@ -248,6 +241,10 @@ export function TileMap({
               </G>
             ) : null}
           </Svg>
+          {smoothCar && (
+            <DriverVehicleMarker heading={smoothCar.heading} speed={activeCar?.speed}
+              point={{ x: sx(smoothCar.lng), y: sy(smoothCar.lat) }} />
+          )}
 
           {/* attribution */}
           <Text
