@@ -12,6 +12,7 @@ const sdk={PlatformPay:{PaymentType:{Immediate:'Immediate'}},initStripe:async()=
 const compiled=ts.transpileModule(fs.readFileSync(root+'/src/lib/nativePayment.native.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
 const moduleValue={exports:{}};
 vm.runInNewContext(compiled,{module:moduleValue,exports:moduleValue.exports,process:{env},require:name=>{
+ if (name === 'expo-constants') return { __esModule: true, default: { expoConfig: { extra: { applePayMerchantId: env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID } } } };
  if(name==='react-native')return {Platform:platform};if(name==='@stripe/stripe-react-native')return sdk;if(name==='./api')return {paymentApi:api};throw Error(name);
 }});
 const payment=moduleValue.exports;
@@ -28,7 +29,7 @@ const payment=moduleValue.exports;
  supported=true;platform.OS='ios';assert.equal((await payment.nativeWalletAvailability()).kind,'apple');
  status={ready:true,verified:true,card:{id:'apple-card',wallet:'apple_pay'}};assert.equal((await payment.setupNativePaymentMethod(true)).id,'apple-card');assert.equal(initialized.googlePay,undefined);assert.equal(initialized.applePay.merchantCountryCode,'NO');
  config={...config,apple_merchant_id:'merchant.other'};assert.equal(await payment.nativeWalletAvailability(),null);
- config={...config,apple_merchant_id:env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID,publishable_key:'pk_live_wrong',test_mode:true};await assert.rejects(()=>payment.setupNativePaymentMethod(),/Betaling er ikke aktivert/);
+ config={...config,apple_merchant_id:env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID,publishable_key:'pk_live_wrong',test_mode:true};await assert.rejects(()=>payment.setupNativePaymentMethod(),/betalingsmåten er ikke tilgjengelig/);
  config={...config,publishable_key:'pk_test_synthetic',test_mode:true};status={payment_status:'processing'};assert.equal(await payment.payNative('ride'),false,'SDK success cannot prove settlement');status={payment_status:'paid'};assert.equal(await payment.payNative('ride'),true);
  console.log('PASS: Android Google Pay/iOS Apple Pay isolation, device support, native setup, cancellation/error/pending verification, key/mode consistency and server-confirmed settlement');
 })().catch(error=>{console.error(error);process.exitCode=1});
