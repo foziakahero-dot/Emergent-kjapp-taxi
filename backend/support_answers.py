@@ -9,6 +9,10 @@ FAQ = {
     "jeg glemte noe i bilen": "Åpne Turer og finn turen der du glemte noe. Send kundestøtte turreferansen og en kort beskrivelse av det du savner.",
     "endre destinasjon underveis": "Snakk med sjåføren før dere endrer ruten. Kundestøtte kan hjelpe hvis du har spørsmål om prisen etterpå.",
     "refusjon og klage på en tur": "Finn turen under Turer. Send kundestøtte turreferansen og fortell hva som skjedde, så kan de vurdere saken.",
+    "how does fixed pricing work": "You can see the fare before you book. Select a car to see what is included and how much waiting time may cost.",
+    "i left something in the car": "Open Trips and find the ride where you left the item. Send support the trip reference and a short description of what you lost.",
+    "change destination during a trip": "Talk to your driver before changing the route. If you have a question about the final fare, contact support after the trip.",
+    "refunds and trip complaints": "Find the ride under Trips. Send support the trip reference and explain what happened so they can review your request.",
 }
 
 
