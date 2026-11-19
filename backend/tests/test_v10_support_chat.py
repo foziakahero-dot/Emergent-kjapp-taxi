@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support_answers
 from ai_configuration import provider_chat_session
 
 class HTTPException(Exception):
@@ -25,7 +26,7 @@ def endpoints(key='fixture-key'):
             nodes.append(node)
     chats = SimpleNamespace(insert_one=AsyncMock())
     tickets = SimpleNamespace(insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id='confirmed-ticket')))
-    context = {'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'APP_ENV':'qa', 'provider_chat_session':provider_chat_session,
+    context = {'support_answers':support_answers, 'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'APP_ENV':'qa', 'provider_chat_session':provider_chat_session,
                'logging':logging, 'ChatRequest':object, 'PublicSupportRequest':object,
                'Request':object, 'Depends':lambda value:None, 'get_current_user':None,
                'HTTPException':HTTPException, '_enforce_rate_limit':AsyncMock(),
@@ -48,6 +49,47 @@ class SupportChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.status_code,503)
         self.assertIn('kundestøtte',error.exception.detail)
         chats.insert_one.assert_not_awaited()
+
+    async def test_support_shortcuts_work_with_provider_disabled(self):
+        ctx,chats,_=endpoints('')
+        with patch.dict('os.environ', {'QA_AI_ENABLED':'false'}):
+            for question, answer in support_answers.FAQ.items():
+                result=await self.invoke(ctx,question.upper()+'?')
+                self.assertEqual(result['reply'],answer)
+        self.assertEqual(chats.insert_one.await_count,2*len(support_answers.FAQ))
+
+    async def test_qa_gateway_never_uses_the_shared_provider_key(self):
+        with patch.dict('os.environ', {'AI_GATEWAY_API_KEY':'shared'}, clear=True):
+            self.assertEqual(support_answers.gateway_key('qa'),'')
+            with patch.dict('os.environ', {'QA_AI_ENABLED':'true','QA_AI_GATEWAY_API_KEY':'dedicated'}):
+                self.assertEqual(support_answers.gateway_key('qa'),'dedicated')
+
+    async def test_free_text_goes_to_the_configured_qa_gateway(self):
+        ctx,chats,_=endpoints('')
+        with patch.dict('os.environ', {'QA_AI_ENABLED':'true','QA_AI_GATEWAY_API_KEY':'dedicated'}), patch.object(support_answers,'gateway_reply',new=AsyncMock(return_value='Svar på spørsmålet')) as gateway:
+            result=await self.invoke(ctx)
+        self.assertEqual(result['reply'],'Svar på spørsmålet')
+        self.assertEqual(gateway.await_args.args[3:5],('actual-user','support-session'))
+        self.assertEqual(chats.insert_one.await_count,2)
+
+    async def test_gateway_request_uses_only_prior_turns_in_this_customers_session(self):
+        collection=Mock()
+        class History:
+            async def __aiter__(self):
+                for row in [{"role":"assistant","content":"Forrige svar"},{"role":"user","content":"Første spørsmål"}]:
+                    yield row
+        collection.find.return_value.sort.return_value.limit.return_value=History()
+        client=AsyncMock()
+        response=Mock()
+        response.json.return_value={"choices":[{"message":{"content":"Nytt svar"}}]}
+        client.post.return_value=response
+        with patch.object(support_answers.httpx, "AsyncClient") as factory:
+            factory.return_value.__aenter__.return_value=client
+            reply=await support_answers.gateway_reply("qa-test","Regler",collection,"eier","økt",12,"Oppfølging")
+        self.assertEqual(reply,"Nytt svar")
+        self.assertEqual(collection.find.call_args.args[0],{"user_id":"eier","session_id":"økt","_id":{"$lt":12}})
+        payload=client.post.await_args.kwargs["json"]
+        self.assertEqual([msg["content"] for msg in payload["messages"]],["Regler","Første spørsmål","Forrige svar","Oppfølging"])
 
     async def test_blank_or_oversized_message_rejected_before_provider_or_write(self):
         for text in ['   ','x'*4001]:
