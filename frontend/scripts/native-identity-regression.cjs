@@ -11,10 +11,10 @@ function load(file, stubs) {
     statusCodes: { SIGN_IN_CANCELLED: 'cancelled', PLAY_SERVICES_NOT_AVAILABLE: 'play-unavailable', IN_PROGRESS: 'in-progress' } };
   const auth = load(root + '/src/lib/socialSignIn.native.ts', { 'react-native': { Platform: { get OS() { return OS; } } }, '@react-native-google-signin/google-signin': sdk, 'expo-apple-authentication': {} });
   assert.equal(await auth.googleIdentity({ google_web_client_id: 'web-client' }), 'signed-provider-token'); assert.equal(playChecks, 1); assert.equal(configured.webClientId, 'web-client');
-  OS = 'ios'; await assert.rejects(auth.googleIdentity({ google_web_client_id: 'web-client' }), /iOS-klient/);
+  OS = 'ios'; await assert.rejects(auth.googleIdentity({ google_web_client_id: 'web-client' }), /Google på iPhone akkurat nå.*Bruk e-post/);
   assert.equal(await auth.googleIdentity({ google_web_client_id: 'web-client', google_ios_client_id: 'ios-client' }), 'signed-provider-token'); assert.equal(configured.iosClientId, 'ios-client');
   result = { type: 'cancelled' }; assert.equal(await auth.googleIdentity({ google_web_client_id: 'web-client', google_ios_client_id: 'ios-client' }), null);
-  for (const [code, message] of [['cancelled', null], ['play-unavailable', /oppdateres/], ['10', /appkonfigurasjon/], ['7', /Sjekk nettet/]]) {
+  for (const [code, message] of [['cancelled', null], ['play-unavailable', /oppdateres/], ['10', /Bruk e-post eller kontakt kundestøtte/], ['7', /Sjekk nettet/]]) {
     error = { code }; const request = auth.googleIdentity({ google_web_client_id: 'web-client', google_ios_client_id: 'ios-client' });
     if (message) await assert.rejects(request, message); else assert.equal(await request, null);
   }
