@@ -29,7 +29,7 @@ before(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', headless: true });
+  browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', executablePath: process.env.PW_EXECUTABLE_PATH, headless: true });
 });
 after(async () => { await browser?.close(); if (server) await new Promise(r => server.close(r)); });
 
@@ -162,9 +162,12 @@ test('mobile admin can enroll before opening the protected route and scroll the 
     if (url.pathname === '/api/auth/2fa/enable') {
       if (req.postDataJSON().code !== '123456') return fail(400);
       enabled = true;
-      return ok({ enabled, backup_codes: ['fixture-reserve'] });
+      return ok({ enabled, backup_codes: ['fixture-reserve'], token: 'fixture-enrolled-session' });
     }
-    if (url.pathname === queue && enabled) return list();
+    if (url.pathname === queue && enabled) {
+      assert.equal(req.headers().authorization, 'Bearer fixture-enrolled-session');
+      return list();
+    }
   }, { enrolled: () => enabled, width: 360, height: 800 });
   await p.getByRole('button', { name: 'Sett opp 2FA' }).click();
   assert.equal(await p.getByRole('navigation').count(), 0);

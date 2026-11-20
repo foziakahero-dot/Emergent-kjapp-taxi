@@ -4,7 +4,8 @@ import math
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from xml.etree import ElementTree
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -115,7 +116,7 @@ def expires_at(header, now):
 def parse_flights(xml):
     if len(xml) > 2_000_000 or any(marker in xml.upper() for marker in (b"<!DOCTYPE", b"<!ENTITY")):
         raise ValueError("Unexpected Avinor feed")
-    root = ElementTree.fromstring(xml)
+    root = ElementTree.fromstring(xml, forbid_dtd=True)
     flights = root.find("flights")
     if flights is None:
         raise ValueError("Avinor feed has no flights element")
@@ -233,6 +234,6 @@ def install_travel_context(api, require_customer, rate_limit):
             raise HTTPException(422, "Velg i dag eller i morgen for flystatus.")
         try:
             result = await travel.flight(number, direction, day)
-        except (httpx.HTTPError, ValueError, ElementTree.ParseError) as exc:
+        except (httpx.HTTPError, ValueError, ElementTree.ParseError, DefusedXmlException) as exc:
             raise HTTPException(503, "Kunne ikke hente flystatus fra Avinor akkurat nå.") from exc
         return {"source": "Avinor", "airport": "OSL", "flight": result}

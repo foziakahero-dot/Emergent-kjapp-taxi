@@ -11,7 +11,6 @@ import random
 import secrets
 import json
 import base64
-import traceback
 import logging
 from time import perf_counter
 import re
@@ -56,6 +55,8 @@ from payment_modes import customer_for_user, method_scope, is_live, payment_conf
 from service_fee_policy import subscription_trip_terms, saved_trip_rate
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
+from edge_origin import EdgeOriginMiddleware
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
@@ -453,7 +454,8 @@ async def purge_synthetic_data(db) -> dict:
     return {"trips": trips.deleted_count, "users": users.deleted_count}
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False,
+                        authenticated_at: float | None = None) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -463,6 +465,10 @@ def create_access_token(user_id: str, email: str) -> str:
         "iat": now.timestamp(),
         "jti": secrets.token_urlsafe(24),
     }
+    if authenticated_at is not None:
+        payload["auth_time"] = authenticated_at
+    if mfa_verified:
+        payload["mfa_verified"] = True
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -788,6 +794,36 @@ async def _apply_driver_identity_risk(
     return user
 
 
+# Only actual writes require fresh authentication. Use matched templates so IDs
+# and query strings never enter permission decisions or security logs.
+PRIVILEGED_WRITES = {
+    ("POST", "/api/admin/fleets"), ("POST", "/api/admin/fleets/{fleet_id}/commission"),
+    ("POST", "/api/admin/refunds"), ("PATCH", "/api/admin/settings"),
+    ("POST", "/api/admin/pricing/rollback"), ("POST", "/api/fleet/stripe/onboarding"),
+    ("POST", "/api/admin/control/fleets/{fleet_id}/stripe-connect"),
+    ("POST", "/api/admin/control/admin-users"), ("PATCH", "/api/admin/control/admin-users/{user_id}"),
+    ("PUT", "/api/admin/control/integration-settings/{group}"),
+}
+
+
+def _check_session_context(request, claims, role):
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    if not request.headers.get("authorization", "").startswith("Bearer "):
+        origin = request.headers.get("origin")
+        allowed = compute_cors_origins(APP_ENV, os.environ.get("FRONTEND_URL", ""))
+        same_origin = f"{request.url.scheme}://{request.url.netloc}"
+        if ((origin and origin != same_origin and origin not in [o for o in allowed if o != "*"])
+                or (not origin and request.headers.get("sec-fetch-site") == "cross-site")):
+            raise HTTPException(403, "Ugyldig forespørselsopprinnelse")
+    route = getattr(request.scope.get("route"), "path", "")
+    if role in {"admin", "superadmin", "fleet_owner"} and (request.method, route) in PRIVILEGED_WRITES:
+        stamp = claims.get("auth_time")
+        if (not isinstance(stamp, (int, float))
+                or not 0 <= datetime.now(timezone.utc).timestamp() - stamp <= 900):
+            raise HTTPException(401, "Logg inn på nytt før denne endringen")
+
+
 async def get_current_user(request: Request) -> dict:
     token = _auth_token_from_request(request)
     if not token:
@@ -801,10 +837,16 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ikke innlogget")
+        if (_twofa_required_role(user.get("role")) and user.get("totp_enabled")
+                and payload.get("mfa_verified") is not True):
+            raise HTTPException(401, "Logg inn med tofaktor på nytt")
         if not _session_is_current(payload, user):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
         if await _session_is_revoked(payload):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
+        _check_session_context(request, payload, user.get("role"))
+        request.state.auth_time = payload.get("auth_time")
+        request.state.mfa_verified = payload.get("mfa_verified") is True
         user = await _apply_driver_identity_risk(user)
         return user_public(user)
     except jwt.ExpiredSignatureError:
@@ -1790,6 +1832,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(EdgeOriginMiddleware, mode=os.getenv("SNAR_EDGE_MODE", "off"),
+                   shared_key=os.getenv("SNAR_EDGE_SHARED_KEY", ""))
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
@@ -1799,27 +1843,50 @@ async def request_id_middleware(request: Request, call_next):
     request.state.request_id = rid
     try:
         response = await call_next(request)
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+        if response.status_code < 400 and request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
             # GPS, availability, logout, assignment and fleet moderation all wake
             # per-customer subscriptions immediately after the canonical write.
             live_cars_stream.changed()
             trip_status_stream.changed()
-        response.headers["X-Request-ID"] = rid
-        elapsed_ms = (perf_counter() - started) * 1000
-        timing = response.headers.get("Server-Timing")
-        response.headers["Server-Timing"] = f"{timing}, app;dur={elapsed_ms:.1f}" if timing else f"app;dur={elapsed_ms:.1f}"
-        if elapsed_ms >= 1000:
-            route = request.scope.get("route")
-            # Route templates avoid recording IDs, addresses, queries or credentials.
-            logging.getLogger("snar.performance").warning(
-                "slow_request request_id=%s method=%s route=%s status=%s duration_ms=%.1f",
-                rid, request.method, getattr(route, "path", "unmatched"), response.status_code, elapsed_ms,
-            )
-        return response
     except Exception:
-        print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
-        traceback.print_exc()
-        return JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
+        route = request.scope.get("route")
+        logging.getLogger("snar.security").error(
+            "request_failed request_id=%s route=%s", rid, getattr(route, "path", "unmatched")
+        )
+        response = JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
+    response.headers["X-Request-ID"] = rid
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if APP_ENV in ("qa", "production"):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    if request.url.path.startswith("/api/") and (
+        request.headers.get("authorization") or request.cookies.get("access_token")
+        or "set-cookie" in response.headers or request.url.path.startswith((
+            "/api/auth/", "/api/driver-invites/", "/api/fleet-applications/",
+            "/api/trips/share/", "/api/payments/", "/api/upload/",
+        ))
+    ):
+        response.headers["Cache-Control"] = "no-store"
+    elapsed_ms = (perf_counter() - started) * 1000
+    timing = response.headers.get("Server-Timing")
+    response.headers["Server-Timing"] = f"{timing}, app;dur={elapsed_ms:.1f}" if timing else f"app;dur={elapsed_ms:.1f}"
+    if response.status_code in (401, 403, 429) or elapsed_ms >= 1000:
+        route = request.scope.get("route")
+        logger = "snar.security" if response.status_code in (401, 403, 429) else "snar.performance"
+        logging.getLogger(logger).warning(
+            "request_result request_id=%s method=%s route=%s status=%s duration_ms=%.1f",
+            rid, request.method, getattr(route, "path", "unmatched"), response.status_code, elapsed_ms,
+        )
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    # FastAPI includes raw input and custom validator context by default.
+    detail = [{"type": error["type"], "loc": error["loc"][:1], "msg": "Ugyldig verdi"}
+              for error in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": detail})
+
 
 # ------------------ Routes ------------------
 @api.get("/")
@@ -2095,7 +2162,7 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
 
 
 async def _authenticate_car_stream(token: str):
-    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    request = Request({"type": "http", "method": "GET", "headers": [(b"authorization", f"Bearer {token}".encode())]})
     return require_customer(await get_current_user(request))
 
 
@@ -2107,7 +2174,7 @@ live_cars_stream = LiveCarsStream(
 
 
 async def _authenticate_trip_stream(token: str):
-    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    request = Request({"type": "http", "method": "GET", "headers": [(b"authorization", f"Bearer {token}".encode())]})
     user = await get_current_user(request)
     return await require_driver(user) if user.get("role") == "driver" else require_customer(user)
 
@@ -2381,7 +2448,8 @@ async def _record_failed_login(email: str, ip: str):
 
 
 async def _clear_failed_logins(email: str, ip: str):
-    await db.login_attempts.delete_many({"identifier": {"$in": [f"email:{email}", f"ip:{ip}"]}})
+    # A successful account must not reset the shared source-IP abuse budget.
+    await db.login_attempts.delete_many({"identifier": f"email:{email}"})
 
 
 async def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int):
@@ -2553,14 +2621,14 @@ async def login(body: LoginRequest, request: Request, response: Response):
         await _record_failed_login(login_key, ip)
         raise HTTPException(status_code=401, detail="Feil innlogging")
 
-    await _clear_failed_logins(login_key, ip)
     user = await _apply_driver_identity_risk(user, body.device_id, body.client, on_login=True)
     uid = str(user["_id"])
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+    await _clear_failed_logins(login_key, ip)
     account_email = str(user.get("email") or "").strip().lower()
-    token = create_access_token(uid, account_email)
+    token = create_access_token(uid, account_email, authenticated_at=datetime.now(timezone.utc).timestamp())
     set_auth_cookie(response, token)
     return {"token": token, "user": user_public(user)}
 
@@ -2617,7 +2685,12 @@ async def twofa_setup(current=Depends(get_current_user)):
     """Generate a fresh (pending) secret + QR. 2FA is not active until verified via /2fa/enable."""
     import io as _bio
     secret = pyotp.random_base32()
-    await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"totp_secret_pending": secret}})
+    result = await db.users.update_one(
+        {"_id": ObjectId(current["id"]), "totp_enabled": {"$ne": True}},
+        {"$set": {"totp_secret_pending": secret}},
+    )
+    if not result.matched_count:
+        raise HTTPException(409, "Tofaktor er allerede aktivert.")
     otpauth = pyotp.TOTP(secret).provisioning_uri(name=current.get("email", "bruker"), issuer_name="KJAPP")
     img = qrcode.make(otpauth)
     buf = _bio.BytesIO()
@@ -2627,7 +2700,8 @@ async def twofa_setup(current=Depends(get_current_user)):
 
 
 @api.post("/auth/2fa/enable")
-async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_user)):
+async def twofa_enable(body: TwoFAEnableRequest, request: Request, response: Response, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "twofa-enroll", 20, 900)
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     pending = (user or {}).get("totp_secret_pending")
     if not pending:
@@ -2635,14 +2709,20 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     if not _verify_totp(pending, body.code):
         raise HTTPException(status_code=400, detail="Feil kode. Prøv igjen.")
     backup = _gen_backup_codes()
-    await db.users.update_one(
-        {"_id": user["_id"]},
+    hashes = [await asyncio.to_thread(hash_password, c) for c in backup]
+    result = await db.users.update_one(
+        {"_id": user["_id"], "totp_secret_pending": pending, "totp_enabled": {"$ne": True}, "disabled": {"$ne": True}},
         {
-            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [await asyncio.to_thread(hash_password, c) for c in backup]},
+            "$set": {"tokens_valid_after": datetime.now(timezone.utc).timestamp(), "totp_secret": pending, "totp_enabled": True, "totp_backup_codes": hashes},
             "$unset": {"totp_secret_pending": ""},
         },
     )
-    return {"enabled": True, "backup_codes": backup}
+    if not result.modified_count:
+        raise HTTPException(409, "Oppsettet er endret. Åpne tofaktorstatus på nytt.")
+    token = create_access_token(current["id"], user.get("email") or "", mfa_verified=True,
+                                authenticated_at=datetime.now(timezone.utc).timestamp())
+    set_auth_cookie(response, token)
+    return {"enabled": True, "backup_codes": backup, "token": token}
 
 
 @api.post("/auth/2fa/disable")
@@ -2681,23 +2761,43 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
         raise HTTPException(status_code=429, detail="For mange forsøk. Prøv igjen om 15 minutter.")
     code = (body.code or "").strip().replace(" ", "")
     ok = _verify_totp(user.get("totp_secret", ""), code)
-    used_idx = None
+    used_hash = None
     if not ok:
-        for i, h in enumerate(user.get("totp_backup_codes", [])):
+        for h in user.get("totp_backup_codes", []):
             if await asyncio.to_thread(verify_password, code, h):
                 ok = True
-                used_idx = i
+                used_hash = h
                 break
     if not ok:
         await _record_failed_login(email, ip)
         raise HTTPException(status_code=401, detail="Feil kode.")
+    # A successfully verified password challenge grants at most one session,
+    # including when two requests complete on different server instances.
+    challenge_id = payload.get("jti")
+    if not challenge_id:
+        raise HTTPException(401, "Logg inn på nytt.")
+    try:
+        consumed = await db.revoked_tokens.update_one(
+            {"_id": "mfa:" + challenge_id},
+            {"$setOnInsert": {"jti": challenge_id, "expires_at": datetime.fromtimestamp(payload["exp"], timezone.utc)}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(401, "Logg inn på nytt.") from None
+    if consumed.upserted_id is None:
+        raise HTTPException(401, "Logg inn på nytt.")
+    if used_hash is not None:
+        result = await db.users.update_one(
+            {"_id": user["_id"], "totp_backup_codes": used_hash, "disabled": {"$ne": True},
+             "totp_enabled": True, "totp_secret": user.get("totp_secret")},
+            {"$pull": {"totp_backup_codes": used_hash}},
+        )
+        if not result.modified_count:
+            raise HTTPException(401, "Feil kode.")
     await _clear_failed_logins(email, ip)
-    if used_idx is not None:
-        codes = user.get("totp_backup_codes", [])
-        codes.pop(used_idx)
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {"totp_backup_codes": codes}})
     uid = str(user["_id"])
-    token = create_access_token(uid, email)
+    token = create_access_token(uid, email, mfa_verified=True,
+                                authenticated_at=datetime.now(timezone.utc).timestamp())
     set_auth_cookie(response, token)
     return {"token": token, "user": user_public(user)}
 
@@ -2835,7 +2935,9 @@ async def change_password(body: ChangePasswordRequest, request: Request, respons
                    "tokens_valid_after": cutoff}, "$unset": {"must_reset_password": ""}})
     if updated.modified_count != 1:
         raise HTTPException(409, "Passordet ble endret samtidig. Logg inn på nytt.")
-    token = create_access_token(current["id"], user.get("email") or "")
+    token = create_access_token(current["id"], user.get("email") or "",
+                                mfa_verified=getattr(request.state, "mfa_verified", False),
+                                authenticated_at=getattr(request.state, "auth_time", None))
     set_auth_cookie(response, token)
     fresh = await db.users.find_one({"_id": user["_id"]})
     return {"token": token, "user": user_public(fresh)}
@@ -9135,11 +9237,21 @@ async def get_payment_status(session_id: str, current=Depends(require_customer))
 
 @api.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
-    payload = await request.body()
+    if not STRIPE_WEBHOOK_SECRET.strip():
+        logging.getLogger("snar.security").error("stripe_webhook_unconfigured")
+        raise HTTPException(503, "Webhook unavailable")
     sig = request.headers.get("stripe-signature", "")
+    if not sig:
+        raise HTTPException(400, "Invalid signature")
+    payload = bytearray()
+    async for chunk in request.stream():
+        if len(payload) + len(chunk) > 1024 * 1024:
+            raise HTTPException(413, "Webhook payload too large")
+        payload.extend(chunk)
     try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
+        event = stripe.Webhook.construct_event(bytes(payload), sig, STRIPE_WEBHOOK_SECRET)
+    except stripe.SignatureVerificationError:
+        logging.getLogger("snar.security").warning("stripe_webhook_signature_rejected")
         raise HTTPException(400, "Invalid signature")
     except Exception:
         raise HTTPException(400, "Webhook error")

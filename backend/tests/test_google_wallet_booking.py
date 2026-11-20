@@ -10,23 +10,29 @@ def enable_wallet(monkeypatch):
     monkeypatch.setenv('GOOGLE_PAY_ENABLED', 'true')
 
 
-def test_google_pay_needs_no_saved_card_and_dispatches_only_after_confirm(monkeypatch):
+def test_google_pay_requires_saved_verified_wallet_and_dispatches_only_after_confirm(monkeypatch):
     enable_wallet(monkeypatch)
     async def check():
         service, trip, raw, intents, events, _ = fixture()
         trip['payment_provider'] = 'google_pay'
         raw.trips.update_one({'trip_id': 't'}, {'$set': {'payment_provider': 'google_pay'}})
         raw.payment_methods.delete_many({})
-        intents.status = 'requires_payment_method'
+        with pytest.raises(HTTPException) as missing:
+            await service.authorize(trip)
+        assert missing.value.status_code == 402 and intents.creates == 0 and not events
+        raw.payment_methods.insert_one({'user_id': trip['user_id'], 'wallet': 'google_pay', 'verified': True,
+            'setup_status': 'succeeded', 'stripe_customer_id': 'cus_test', 'stripe_payment_method_id': 'pm_test'})
+        intents.status = 'requires_action'
         for _ in range(2):
             with pytest.raises(HTTPException) as exc:
                 await service.authorize(trip)
             detail = exc.value.detail
-            assert detail['payment_provider'] == 'google_pay'
-            assert detail['amount_ore'] == 17300 and detail['currency'] == 'nok'
+            assert detail['code'] == 'reservation_requires_action'
+            assert detail['strict_payment_method'] and detail['payment_method_id'] == 'pm_test'
         assert not events and intents.creates == 1 and intents.captures == 0
         pi = next(iter(intents.objects.values()))
-        assert pi['capture_method'] == 'manual' and 'off_session' not in pi and 'confirm' not in pi
+        assert pi['capture_method'] == 'manual' and pi['amount'] == 17300 and pi['currency'] == 'nok'
+        assert pi['payment_method'] == 'pm_test' and pi['confirm']
         with pytest.raises(HTTPException):
             await service.confirm('t', 'another-user')
         pi.update(status='requires_capture', amount_capturable=17300)
@@ -44,7 +50,9 @@ def test_cancelled_google_pay_never_dispatches(monkeypatch):
     async def check():
         service, trip, raw, intents, events, _ = fixture()
         trip['payment_provider'] = 'google_pay'
-        intents.status = 'requires_payment_method'
+        raw.payment_methods.update_one({'user_id': trip['user_id']},
+            {'$set': {'wallet': 'google_pay', 'stripe_customer_id': 'cus_test'}})
+        intents.status = 'requires_action'
         with pytest.raises(HTTPException):
             await service.authorize(trip)
         raw.trips.update_one({'trip_id': 't'}, {'$set': {'status': 'cancelled'}})

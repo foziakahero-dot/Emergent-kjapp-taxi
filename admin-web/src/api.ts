@@ -54,7 +54,11 @@ export const api = {
   logout: () => http.post('/auth/logout').then((r) => r.data),
   twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
   twofaSetup: () => http.post('/auth/2fa/setup').then((r) => r.data),
-  twofaEnable: (code: string) => http.post('/auth/2fa/enable', { code }).then((r) => r.data),
+  twofaEnable: async (code: string) => {
+    const { data } = await http.post('/auth/2fa/enable', { code });
+    if (data.token) sessionStorage.setItem(TOKEN_KEY, data.token);
+    return data;
+  },
   twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),

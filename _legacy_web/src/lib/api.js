@@ -26,7 +26,11 @@ export const authApi = {
   logout: () => api.post("/auth/logout").then((r) => r.data),
   twofaStatus: () => api.get("/auth/2fa/status").then((r) => r.data),
   twofaSetup: () => api.post("/auth/2fa/setup").then((r) => r.data),
-  twofaEnable: (code) => api.post("/auth/2fa/enable", { code }).then((r) => r.data),
+  twofaEnable: async (code) => {
+    const { data } = await api.post("/auth/2fa/enable", { code });
+    if (data.token) localStorage.setItem("kjapp_token", data.token);
+    return data;
+  },
   twofaDisable: (password, code) => api.post("/auth/2fa/disable", { password, code }).then((r) => r.data),
   twofaVerifyLogin: (twofa_token, code) => api.post("/auth/2fa/verify-login", { twofa_token, code }).then((r) => r.data),
 };
