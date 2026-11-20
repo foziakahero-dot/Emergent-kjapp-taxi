@@ -16,6 +16,8 @@ type FormState = {
   phone: string;
   city: string;
   role: BetaRole;
+  device: "ios" | "android" | "";
+  district: string;
   website: string;
 };
 
@@ -25,6 +27,8 @@ const initialForm: FormState = {
   phone: "",
   city: "Oslo",
   role: "passenger",
+  device: "",
+  district: "",
   website: "",
 };
 
@@ -41,6 +45,7 @@ function validate(form: FormState) {
   )
     return "Skriv inn en gyldig e-postadresse.";
   if (form.city.trim().length < 2) return "Skriv inn byen din.";
+  if (!form.device) return "Velg enhet (iOS eller Android).";
   return "";
 }
 
@@ -161,6 +166,8 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
           phone: form.phone.trim(),
           city: form.city.trim(),
           role: form.role,
+          device: form.device,
+          district: form.district.trim(),
           website: form.website,
         }),
       });
@@ -325,6 +332,35 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
                 <option value="driver">Sjåfør</option>
                 <option value="fleet_owner">Løyvehaver / flåte</option>
               </select>
+            </label>
+            <label>
+              <span>Enhet <small>(obligatorisk)</small></span>
+              <select
+                disabled={status === "submitting"}
+                value={form.device}
+                onChange={(event) =>
+                  setForm({ ...form, device: event.target.value as "ios" | "android" | "" })
+                }
+                required
+              >
+                <option value="">Velg enhet</option>
+                <option value="ios">iPhone / iOS</option>
+                <option value="android">Android</option>
+              </select>
+            </label>
+            <label>
+              <span>Oslo bydel <small>valgfritt</small></span>
+              <input
+                type="text"
+                autoComplete="address-level3"
+                value={form.district}
+                onChange={(event) =>
+                  setForm({ ...form, district: event.target.value })
+                }
+                disabled={status === "submitting"}
+                maxLength={50}
+                placeholder="f.eks. Grünerløkka, Frogner, Majorstuen…"
+              />
             </label>
             <label className="mk-beta-honeypot" aria-hidden="true">
               <span>Nettside</span>

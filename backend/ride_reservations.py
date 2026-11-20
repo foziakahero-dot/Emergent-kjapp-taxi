@@ -9,6 +9,7 @@ from promo_credits import platform_fee_ore
 from fastapi import HTTPException
 from cash_payments import is_cash
 from payment_modes import customer_for_user, method_scope, is_live, payment_config, stripe_client
+from service_fee_policy import resolve_commission_rate
 
 
 def value(obj, key, default=None):
@@ -20,10 +21,12 @@ def stripe_id(obj):
 
 
 class RideReservations:
-    def __init__(self, db, stripe, *, mark_paid, receipts, push, dispatch, destination):
+    def __init__(self, db, stripe, *, mark_paid, receipts, push, dispatch, destination, campaign_discount=None):
         self.db, self.stripe = db, stripe
         self.mark_paid, self.receipts, self.push = mark_paid, receipts, push
         self.dispatch, self.destination = dispatch, destination
+        # Optional async function(customer_id, trip_id, price_kr, commission_rate) -> discount_kr
+        self.campaign_discount = campaign_discount
 
     def client(self):
         if not self.stripe.api_key:
@@ -94,19 +97,36 @@ class RideReservations:
                     customer_id = user.get("stripe_customer_id")
                 if not pm or not customer_id:
                     raise HTTPException(402, "Legg til og bekreft et betalingskort i riktig betalingsmiljø før du bestiller")
-            amount = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
+
+            # Check for beta campaign discount
+            campaign_discount_kr = 0
+            commission_rate, _ = await resolve_commission_rate(self.db, trip)
+            if self.campaign_discount:
+                campaign_discount_kr = await self.campaign_discount(trip["user_id"], trip["trip_id"], trip["price"], commission_rate)
+
+            full_price_ore = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
+            # Apply campaign discount: reduce authorized amount by discount (customer pays less)
+            # But ensure minimum 1 kr customer charge
+            MIN_CUSTOMER_CHARGE_ORE = 100
+            discounted_amount_ore = max(MIN_CUSTOMER_CHARGE_ORE, full_price_ore - (campaign_discount_kr * 100))
+
             # A larger hold is permitted only when the rider accepted the disclosed
             # pickup policy. Unused waiting funds are released by partial capture.
-            if amount != int(trip["price"]) * 100 and not (
+            if full_price_ore != int(trip["price"]) * 100 and not (
                 trip.get("waiting_policy_accepted_at") and trip.get("waiting_policy")
-                and amount == (int(trip["price"]) + int(trip["waiting_policy"]["max_fee"])) * 100
+                and full_price_ore == (int(trip["price"]) + int(trip["waiting_policy"]["max_fee"])) * 100
             ):
                 raise HTTPException(409, "Reservasjonsbeløpet er ikke bekreftet av kunden")
-            if amount <= 0:
+            if discounted_amount_ore <= 0:
                 raise HTTPException(400, "Ugyldig turpris")
+
+            # Store both full price and discounted amount
             record = {"trip_id": trip["trip_id"], "user_id": trip["user_id"],
                       "kind": "ride_reservation", "session_id": f"reservation:{trip['trip_id']}",
-                      "amount": int(trip["price"]), "currency": "nok", "authorized_amount_ore": amount,
+                      "amount": int(trip["price"]), "currency": "nok",
+                      "authorized_amount_ore": discounted_amount_ore,
+                      "full_price_ore": full_price_ore,
+                      "campaign_discount_kr": campaign_discount_kr,
                       "stripe_customer_id": customer_id, "stripe_livemode": is_live(self.stripe),
                       "payment_provider": "google_pay" if wallet else "card",
                       "wallet": "google_pay" if wallet else None,
@@ -259,39 +279,63 @@ class RideReservations:
 
     async def settle(self, trip, pi, record):
         amount = int(value(pi, "amount_received", 0))
-        if not self.validate(pi, record) or value(pi, "status") != "succeeded" or amount != int(trip["price"]) * 100:
+        full_price_ore = int(trip["price"]) * 100
+        campaign_discount_kr = int(record.get("campaign_discount_kr", 0))
+        discount_ore = campaign_discount_kr * 100
+
+        # Validate against full price (what the fleet/driver should receive)
+        if not self.validate(pi, record) or value(pi, "status") != "succeeded" or amount != full_price_ore:
             raise HTTPException(409, "Betalingsbeløpet samsvarer ikke med turen")
-        fields = {"status": "completed", "payment_status": "paid", "amount": amount / 100,
-                  "stripe_payment_intent_id": stripe_id(pi), "updated_at": datetime.now(timezone.utc)}
+
+        fields = {"status": "completed", "payment_status": "paid", "amount": full_price_ore / 100,
+                  "stripe_payment_intent_id": stripe_id(pi), "updated_at": datetime.now(timezone.utc),
+                  "campaign_discount_kr": campaign_discount_kr}
+
         destination = await self.destination(trip)
         if destination:
-            fee = platform_fee_ore(amount, int(trip.get("promo_discount") or 0) * 100, destination["commission_rate"])
+            commission_rate, _ = await resolve_commission_rate(self.db, trip)
+            # Platform fee calculated on full price minus campaign discount (SNAR absorbs discount)
+            fee = platform_fee_ore(full_price_ore, discount_ore, commission_rate)
+            # Fleet/driver receives full price minus platform fee (they get paid as if no discount)
+            fleet_net_ore = full_price_ore - fee
             try:
                 transfer = await asyncio.to_thread(self.client().v1.transfers.create, {
-                    "amount": amount - fee, "currency": "nok", "destination": destination["stripe_account_id"],
+                    "amount": fleet_net_ore, "currency": "nok", "destination": destination["stripe_account_id"],
                     "source_transaction": stripe_id(value(pi, "latest_charge")), "transfer_group": f"snar_{trip['trip_id']}",
                     "metadata": {"trip_id": trip["trip_id"], "fleet_id": destination["fleet_id"]},
                 }, {"idempotency_key": f"snar-fleet-transfer-{trip['trip_id']}"})
                 fields.update({"stripe_transfer_id": stripe_id(transfer), "fleet_id": destination["fleet_id"],
                                "stripe_account_id": destination["stripe_account_id"], "platform_fee": fee / 100,
-                               "fleet_net": (amount - fee) / 100, "commission_rate": destination["commission_rate"],
+                               "fleet_net": fleet_net_ore / 100, "commission_rate": commission_rate,
                                "settlement_model": "stripe_separate_charge_transfer"})
             except self.stripe.StripeError:
                 fields["fleet_transfer_pending"] = True
         elif trip.get("fleet_id"):
             fields["fleet_transfer_pending"] = True
+
         await self.db.payment_transactions.update_one({"trip_id": trip["trip_id"], "kind": "ride_reservation"}, {"$set": fields})
         await self.db.trips.update_one({"trip_id": trip["trip_id"]}, {"$set": {
             "reservation_status": "captured", "price_review_required": False,
             "requires_manual_settlement": bool(fields.get("fleet_transfer_pending")),
             "fleet_transfer_pending": bool(fields.get("fleet_transfer_pending")),
+            "campaign_discount_kr": campaign_discount_kr,
         }})
+
+        # Complete campaign ride if discount was applied
+        if campaign_discount_kr > 0:
+            try:
+                from beta_campaign import complete_campaign_ride
+                commission_rate, _ = await resolve_commission_rate(self.db, trip)
+                await complete_campaign_ride(self.db, trip["user_id"], trip["trip_id"], trip["price"], commission_rate)
+            except Exception as e:
+                logging.warning("Failed to complete campaign ride: %s", e)
+
         await self.mark_paid(trip["trip_id"], trip["user_id"])
         await self.receipts(trip["trip_id"])
         sent = await self.db.trips.update_one({"trip_id": trip["trip_id"], "reservation_paid_notified": {"$ne": True}},
                                             {"$set": {"reservation_paid_notified": True}})
         if sent.modified_count:
-            await self.notify(trip, "Turen er betalt", f"{amount / 100:g} kr ble trukket automatisk. Kvitteringen er klar i SNAR.")
+            await self.notify(trip, "Turen er betalt", f"{full_price_ore / 100:g} kr ble trukket automatisk. Kvitteringen er klar i SNAR.")
 
     async def release(self, trip):
         if is_cash(trip):
@@ -301,6 +345,16 @@ class RideReservations:
         record = await self.record(trip)
         if not record:
             return
+
+        # Cancel campaign reservation if one exists
+        campaign_discount_kr = int(record.get("campaign_discount_kr", 0))
+        if campaign_discount_kr > 0:
+            try:
+                from beta_campaign import cancel_campaign_reservation
+                await cancel_campaign_reservation(self.db, trip["user_id"], trip["trip_id"])
+            except Exception as e:
+                logging.warning("Failed to cancel campaign reservation: %s", e)
+
         try:
             if not record.get("stripe_payment_intent_id"):
                 # Recover the same idempotent intent after a create response was lost.
