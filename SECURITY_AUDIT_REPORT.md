@@ -9,7 +9,7 @@
 | Render, eksisterende produksjonstjeneste | release/onboarding-live-base-20261020 | 02ed5c061d34f80f5b255a2f270a4903aa3c271e |
 | GitHub, standardgren | main | 044965a479905627e5fde59d6fea846dfb93cc8b |
 
-QA svarte HTTP 200 på begge kontrollene og rapporterte isolert QA-database. Den eksisterende produksjonstjenestens helseendepunkt svarte. Det planlagte SNAR-produksjonsdomenet svarte 503 under kontrollen. Historisk bootstrap og opprinnelig QA-baseline er egne milepæler. Netlifys faktisk publiserte panelartefakter, alle aliaser og leverandørtilganger er ikke fullstendig attestert.
+QA svarte HTTP 200 på begge kontrollene og rapporterte isolert QA-database. Den eksisterende produksjonstjenestens helseendepunkt svarte. Det planlagte SNAR-produksjonsdomenet svarte 503 under kontrollen. Historisk bootstrap og opprinnelig QA-baseline er egne milepæler. Netlify-koblingen krevde ny autentisering. Faktisk publiserte panelartefakter og alle aliaser er uverifisert.
 
 ### Prioriterte funn
 
@@ -26,13 +26,15 @@ QA svarte HTTP 200 på begge kontrollene og rapporterte isolert QA-database. Den
 
 ### Øvrige observasjoner
 
-- Atlas QA-prosjekt og database var avgrenset. Listen over tillatte nett hadde to oppføringer. Ingen av disse åpnet for hele IPv4- eller IPv6-internett. Effektive databaseroller, krypteringsvalg, oppbevaring av kopier, produksjonsnett og gjenoppretting er uverifisert.
+- Atlas QA-prosjekt og database var avgrenset. Listen over tillatte nett hadde to oppføringer. Ingen av disse åpnet for hele IPv4- eller IPv6-internett. Atlas oppga én databaseidentitet med cluster-scope og rollen readWrite kun i snar_qa. Hvilken identitet prosessen faktisk bruker, produksjonsroller, krypteringsvalg, oppbevaring av kopier og gjenoppretting er uverifisert.
 - Kundeinnlogging har egne flyter for Google og Apple. Engangskoder har utløp, forsøksgrense og konsumeringsvilkår. Driver bruker invitasjon og kontrolleres mot rolle og flåte. Rolleavhengigheter alene beviser ikke objektisolasjon. Skjemaer, objekttilgang og dokumentutlevering er dekket på utvalgte testbaner.
 - Realtime har egne autentiserte Socket.IO-grensesnitt i tillegg til FastAPI. Sesjon, rolle og snapshot kontrolleres under abonnementet. Fysisk GPS, skifte mellom nett og utlogging fra to enheter gjenstår.
 - Reservasjonstjenesten verifiserer tur, kunde, beløp, valuta, betalingsmiddel ved streng binding og miljø. Reservasjon og capture benytter idempotens. Kontanttur skal ikke kortreserveres. Den kontrollerte standardflyten har abonnementstermin med null provisjon. Ønsket 12 % må verifiseres på faktisk lanseringsgren, også med refusjon og mottakeravstemming.
 - Founding 500: ventelisteregistrering og kredittkode finnes, men en sammenhengende innløsning med atomisk tak, budsjett og oppgjør er ikke påvist i denne QA-kandidaten. Hold kredittkampanjen av frem til separat godkjent test.
 - DNS-kontroll fant SPF for hoveddomenet og undersøkte returpostdomener, DKIM-poster for hoved-/QA-avsender og DMARC med reject på hoveddomenet. Faktisk signatur og SPF-/DKIM-alignment må bevises fra meldingsheadere til en kontrollert mottaker.
 - Historikkskanningen gjelder Git-objektene som var tilgjengelige lokalt. Den dekker ikke fullstendig bilder, LFS, alle byggeartefakter, leverandørlogger, slettede referanser eller personopplysninger i fritekst.
+
+En avgrenset kontroll av sporede tekstfiler fant et e-postmønster fra vanlig privat e-posttjeneste i én fil og seks historiske commits med endringer som passet søket. Eier må avklare om dette er reelle personopplysninger og om publiseringen har et grunnlag. Ingen adresser gjengis.
 
 Metoden bruker OWASP ASVS 5.0 og API Security Top 10 2023 som ramme for prioritering. Se [trusselmodellen](THREAT_MODEL.md), [testresultatene](SECURITY_TEST_RESULTS.md) og [lanseringskriteriene](BETA_SECURITY_GATE.md). [OWASP ASVS](https://asvs.owasp.org/) · [OWASP API Security](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
 

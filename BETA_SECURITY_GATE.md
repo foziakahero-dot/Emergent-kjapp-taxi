@@ -5,7 +5,7 @@
 | Prioritet | Krav for åpning | Nåstatus | Hvem leverer bevis |
 | --- | --- | --- | --- |
 | P0 | Alle potensielt private historiske nøkler er entydig klassifisert og ev. sikret | Åpen. Gyldighet, rettigheter og eventuell bruk er uavklart. Kritisk kompromittering er ikke påvist. | Leverandøreier og sikkerhetsansvarlig |
-| P1 | Sikkerhetsendringene er reviewet og testet på nøyaktig QA-kandidat | Backend testet lokalt. Felles QA kjørte tidligere SHA ved kontroll. | Backend + drift |
+| P1 | Sikkerhetsendringene er reviewet og testet på nøyaktig QA-kandidat | Backend testet lokalt. GitHub Actions fikk ikke starte pga. faktureringssperre. Felles QA kjørte tidligere SHA ved kontroll. | Backend + drift |
 | P1 | Admin/Fleet, faktoraktivering, sesjonsutløp, økonomiske rettigheter og dokumentinnsyn fungerer gjennom faktisk panel | Lokal API-dekning og panelbygg. Runtime-bevis på sikkerhetskandidaten mangler. | Panelansvarlig |
 | P1 | Kunde registrerer seg med planlagte påloggingsmetoder og OTP | Offline-kontroller finnes. QA-OTP er dokumentert avslått. Begge leverandørinnlogginger og OTP på fysiske relevante enheter gjenstår. | Mobil + QA |
 | P1 | Testtur knytter sammen flåtesøknad, godkjenning, Fleet-login, sjåførinvitasjon, dokumentkontroll, online/offline, bestilling, dispatch, GPS, fullføring og kvittering | Tidligere brukerrapportert fullført tur og separate QA-observasjoner. Ingen komplett sammenhengende kjøring på denne SHA. | QA-eier |
