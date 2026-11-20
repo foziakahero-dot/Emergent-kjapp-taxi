@@ -1,17 +1,17 @@
 # Minimal dependency set for importing backend/server.py and running focused beta regressions.
 # Keep this free of Emergent/private wheels so GitHub Actions can validate the core backend.
 bcrypt==4.2.1
-cryptography==49.0.0
+cryptography==50.0.0
 email-validator==2.3.0
-fastapi==0.115.6
+fastapi==0.165.0
 httpx==0.28.1
-motor==3.6.0
-PyJWT==2.10.1
-python-socketio==5.16.0
-pymongo==4.9.2
+motor==3.7.1
+PyJWT==2.15.1
+python-socketio==5.16.2
+pymongo==4.20.1
 PyOTP==2.10.0
-python-dotenv==1.0.1
-python-multipart==0.0.19
+python-dotenv==1.2.4
+python-multipart==0.0.31
 qrcode==8.2
 requests==2.34.2
 stripe==14.4.1
@@ -21,4 +21,6 @@ openpyxl==3.1.5
 mongomock==4.3.0
 
 
-Pillow==11.3.0
+Pillow==13.0.0
+starlette==1.10.0
+defusedxml==0.7.1

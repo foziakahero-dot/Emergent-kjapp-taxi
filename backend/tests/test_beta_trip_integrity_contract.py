@@ -202,7 +202,8 @@ def test_unresolved_checkout_cannot_escape_payment_state():
     assert "trip?.payment_status !== 'paid'" in receipt_source
     assert "stage === 'rating' && paid" in RECEIPT_VIEW
     payment_success = (ROOT / "frontend" / "app" / "payment" / "success.tsx").read_text(encoding="utf-8")
-    assert "turen forblir åpen til serveren bekrefter betalingen" in payment_success
+    assert "if (status?.payment_status === 'paid')" in payment_success
+    assert "setState('failed')" in payment_success
     assert "Tilbake til kvittering" in payment_success
 
 

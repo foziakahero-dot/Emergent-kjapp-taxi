@@ -4,6 +4,6 @@
 -r requirements-ci.txt
 uvicorn==0.32.1
 pywebpush==2.0.1
-cryptography==49.0.0
+cryptography==50.0.0
 firebase_admin==7.5.0
 sendgrid==6.12.5
