@@ -16,9 +16,11 @@ export default function PaymentSuccess() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
-  const [state, setState] = useState<'checking' | 'failed'>('checking');
+  const [state, setState] = useState<'checking' | 'pending' | 'failed'>('checking');
+  const [retry, setRetry] = useState(0);
   const [message, setMessage] = useState('Bekrefter betalingen…');
-  const [tripId, setTripId] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ session: string; trip: string } | null>(null);
+  const tripId = receipt && receipt.session === session_id ? receipt.trip : null;
 
   useEffect(() => {
     let active = true;
@@ -30,11 +32,13 @@ export default function PaymentSuccess() {
         return;
       }
 
+      setMessage('Bekrefter betalingen…');
+      setState('checking');
       for (let attempt = 0; attempt < 12 && active; attempt += 1) {
         try {
           const status = await paymentApi.checkoutStatus(session_id);
           if (!active) return;
-          if (status?.trip_id) setTripId(status.trip_id);
+          if (status?.trip_id) setReceipt({ session: session_id, trip: status.trip_id });
           if (status?.payment_status === 'paid') {
             const paidTripId = status?.trip_id;
             router.replace(paidTripId ? `/receipt/${paidTripId}` : '/(app)/home');
@@ -50,14 +54,14 @@ export default function PaymentSuccess() {
       }
 
       if (active) {
-        setMessage('Vi venter på betalingsbekreftelsen. Sjekk kvitteringen igjen om litt.');
-        setState('failed');
+        setMessage('Vi har ennå ikke fått bekreftet betalingen. Du kan sjekke status igjen.');
+        setState('pending');
       }
     };
 
     verify();
     return () => { active = false; };
-  }, [session_id, router]);
+  }, [session_id, router, retry]);
 
   return (
     <View style={[s.page, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
@@ -70,13 +74,19 @@ export default function PaymentSuccess() {
         <>
           <View style={s.icon}><Icon name="card" size={28} color={colors.accent} /></View>
           <Text style={s.title}>Betaling</Text>
-          <Text style={s.sub}>{message}</Text>
+          <Text style={s.sub} accessibilityLiveRegion="polite">{message}</Text>
+          {state === 'pending' && (
+            <Pressable accessibilityRole="button" style={s.button} onPress={() => setRetry((value) => value + 1)} testID="payment-status-retry">
+              <Text style={s.buttonText}>Sjekk betalingsstatus igjen</Text>
+            </Pressable>
+          )}
           <Pressable
-            style={s.button}
+            accessibilityRole="button"
+            style={state === 'pending' ? s.secondaryButton : s.button}
             onPress={() => router.replace(tripId ? `/receipt/${tripId}` : '/(app)/home')}
             testID="payment-success-back"
           >
-            <Text style={s.buttonText}>{tripId ? 'Tilbake til kvittering' : 'Til hjem'}</Text>
+            <Text style={state === 'pending' ? s.secondaryText : s.buttonText}>{tripId ? 'Tilbake til kvittering' : 'Til hjem'}</Text>
           </Pressable>
         </>
       )}
@@ -91,5 +101,7 @@ const useStyles = makeStyles((c) => ({
   sub: { color: c.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 10 },
   button: { marginTop: 24, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 28, paddingVertical: 14 },
   buttonText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
+  secondaryButton: { paddingHorizontal: 20, paddingVertical: 14, marginTop: 6 },
+  secondaryText: { color: c.text, fontSize: 15, fontWeight: '700' },
 }));
 
