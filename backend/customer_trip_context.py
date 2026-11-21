@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 
+from driver_document_identity import PROOF
 from travel_context import parsed_time
 
 
@@ -13,7 +14,7 @@ async def confirmed_driver_identity(db, driver_id, now=None):
     driver = await db.users.find_one(
         {"_id": ObjectId(driver_id), "role": "driver", "approved": True, "disabled": {"$ne": True}},
         {"identity_verification_status": 1, "identity_verified_at": 1,
-         "next_identity_check_at": 1, "identity_recheck_pending_reason": 1},
+         "next_identity_check_at": 1, "identity_recheck_pending_reason": 1, PROOF: 1},
     )
     if not driver or driver.get("identity_verification_status") != "verified" or driver.get("identity_recheck_pending_reason"):
         return False
@@ -23,6 +24,11 @@ async def confirmed_driver_identity(db, driver_id, now=None):
     now = now or datetime.now(timezone.utc)
     if not verified or verified > now or (due and due <= now):
         return False
+    proof = driver.get(PROOF) or {}
+    if (proof.get("livemode") is True and proof.get("status") == "verified"
+            and proof.get("reviewed_at") == verified_at
+            and isinstance(proof.get("reviewed_by"), str) and proof["reviewed_by"]):
+        return True
     review = await db.driver_identity_verifications.find_one(
         {"driver_user_id": str(driver_id), "status": "verified", "reviewed_at": verified_at,
          "reviewed_by": {"$type": "string", "$ne": ""}},

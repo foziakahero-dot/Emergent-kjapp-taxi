@@ -6,7 +6,7 @@ import { V10Action, V10Header, v10 } from '@/src/components/V10UI';
 import { Icon } from '@/src/components/Icon';
 import { useReducedMotion } from '@/src/components/Motion';
 import { useAuth } from '@/src/context/AuthContext';
-import { aiApi, api } from '@/src/lib/api';
+import { aiApi, customerSupportApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { font, makeStyles, useTheme } from '@/src/theme';
 import { useTranslation } from '@/src/lib/customerLanguage';
@@ -15,7 +15,9 @@ type Message = { role: 'assistant' | 'user'; text: string };
 const FAQ = ['Hvordan fungerer fastpris?', 'Jeg glemte noe i bilen', 'Endre destinasjon underveis', 'Refusjon og klage på en tur'];
 
 /** Figma Support layout, with replies and ticket IDs supplied by SNAR. */
-export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () => void; initialMessage?: string }) {
+export function CustomerSupport({ onBack, initialMessage = '', tripId }: {
+  onBack: () => void; initialMessage?: string; tripId?: string;
+}) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const s = useStyles();
@@ -29,6 +31,7 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState(initialMessage);
   const [failed, setFailed] = useState('');
+  const fullySent = useRef(0);
   const lastTicket = useRef<{ message: string; ticket: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,11 +45,15 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
     requestLock.current = true; setBusy(true); setError(''); setFailed(''); setInput('');
     if (!retry) append({ role: 'user', text: value });
     try {
-      const result = await aiApi.chat(value, sessionId);
+      const result = await aiApi.chat(value, sessionId, tripId);
       if (active.current) {
         setAiUnavailable(false);
         if (typeof result.reply !== 'string' || !result.reply.trim()) throw new Error(t('Ingen svar mottatt. Prøv igjen.'));
         append({ role: 'assistant', text: result.reply });
+        if (result.ticket_id) {
+          lastTicket.current = { message: value, ticket: result.ticket_id };
+          fullySent.current = messages.length + (retry ? 1 : 2);
+        }
       }
     } catch (e: any) { if (active.current) {
       const unavailable = e?.response?.status === 503;
@@ -57,17 +64,24 @@ export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () =>
   };
   const escalate = async () => {
     if (requestLock.current) return;
-    const text = [...new Set([initialMessage, ...messages.filter(message => message.role === 'user').map(message => message.text), input].map(value => value.trim()).filter(Boolean))].join('\n\n');
+    const unsent = messages.slice(fullySent.current);
+    const topic = fullySent.current ? '' : initialMessage;
+    const text = [...new Set([topic, ...unsent.filter(message => message.role === 'user').map(message => message.text), input].map(value => value.trim()).filter(Boolean))].join('\n\n');
+    if (!text && lastTicket.current) {
+      setError(`Henvendelsen er allerede mottatt. Saksnummer: ${lastTicket.current.ticket}.`);
+      return;
+    }
     if (text.length < 10) { setError(t("Skriv minst 10 tegn om hva du trenger hjelp med.")); return; }
-    if (!user?.email && !user?.phone) { setError(t("Legg til kontaktinformasjon før du sender en henvendelse.")); return; }
+    if (!user) { setError(t('Logg inn før du sender en henvendelse.')); return; }
     if (lastTicket.current?.message === text) { setError(`Denne henvendelsen er allerede mottatt. Saksnummer: ${lastTicket.current.ticket}.`); return; }
     requestLock.current = true; setBusy(true); setError('');
     try {
-      const result = await api.post('/support/public', { topic: 'annet', name: user?.fullName, contact: user?.email || user?.phone, message: text.slice(0, 4000) });
+      const result = await customerSupportApi.createCase(text.slice(0, 4000), sessionId, tripId);
       if (active.current) {
-        if (result.data?.ok !== true || !result.data?.ticket_id) throw new Error(t('Henvendelsen kunne ikke bekreftes.'));
-        lastTicket.current = { message: text, ticket: result.data.ticket_id };
-        append({ role: 'assistant', text: `${t('Henvendelsen er mottatt. Saksnummer:')} ${result.data.ticket_id}.` });
+        if (result?.ok !== true || !result?.ticket_id) throw new Error(t('Henvendelsen kunne ikke bekreftes.'));
+        lastTicket.current = { message: text, ticket: result.ticket_id };
+        fullySent.current = messages.length + 1;
+        append({ role: 'assistant', text: `${t('Henvendelsen er mottatt. Saksnummer:')} ${result.ticket_id}.` });
         setInput(''); setFailed('');
       }
     } catch (e) { if (active.current) setError(apiError(e)); }

@@ -139,10 +139,15 @@ export const paymentApi = {
 };
 
 export const aiApi = {
-  chat: (message: string, session_id?: string) =>
-    api.post('/ai/chat', { message, session_id }).then((r) => r.data),
+  chat: (message: string, session_id?: string, trip_id?: string) =>
+    api.post('/ai/chat', { message, session_id, trip_id }, { timeout: 30000 }).then((r) => r.data),
   transcribe: (audio_base64: string, mime_type = 'audio/m4a', language = 'no') =>
     api.post('/ai/transcribe', { audio_base64, mime_type, language }).then((r) => r.data),
+};
+
+export const customerSupportApi = {
+  createCase: (message: string, session_id: string, trip_id?: string) =>
+    api.post('/support/cases', { message, session_id, trip_id }).then(r => r.data),
 };
 
 export const messagesApi = {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, apiError } from './api';
 import { useAuth } from './auth';
 import LiveMap from './LiveMap';
@@ -314,10 +314,13 @@ function TripDrawer({ trip, onClose, onChanged }: any) {
 /* ----------------------------- Drivers ----------------------------- */
 export function Drivers() {
   const [sp] = useSearchParams();
+  const { user } = useAuth();
   const [status, setStatus] = useState('');
   const [qi, setQi] = useState(sp.get('q') || '');
   const q = useDebounced(qi);
   const [page, setPage] = useState(1);
+  const [reviewing, setReviewing] = useState('');
+  const [reviewError, setReviewError] = useState('');
   useEffect(() => { setPage(1); }, [status, q]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/drivers-full', { status, q, page, page_size: PAGE });
 
@@ -325,6 +328,15 @@ export function Drivers() {
     const next = !d.approved;
     if (!window.confirm(next ? `Godkjenne ${d.name}?` : `Suspendere ${d.name}?`)) return;
     try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(e?.response?.data?.detail || 'Feil'); }
+  };
+
+  const confirmIdentity = async (driver: any) => {
+    const reference = driver.document_identity_review_id;
+    if (!reference || !window.confirm(`Har du åpnet Stripe-kontroll ${reference} og bekreftet at legitimasjonen tilhører ${driver.name}?`)) return;
+    setReviewing(driver.id); setReviewError('');
+    try { await api.confirmDriverIdentity(driver.id, reference); await reload(); }
+    catch (e) { setReviewError(apiError(e)); }
+    finally { setReviewing(''); }
   };
 
   const toggleCapability = async (d: any, capability: 'wheelchair' | 'child_seat') => {
@@ -344,14 +356,22 @@ export function Drivers() {
           <option value="pending">Til godkjenning</option><option value="online">Online</option>
         </select>
       </div>
-      <ErrorBanner msg={err} />
+      <ErrorBanner msg={err || reviewError} />
       <div className="tablewrap">
         <table>
           <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Utstyr</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
-                <td><div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div></td>
+                <td>
+                  <div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div>
+                  {d.document_identity?.status === 'verified' ? (
+                    <div className="cell-sub">{d.document_identity.mode === 'live' ? 'ID-dokument kontrollert av Stripe' : 'Stripe ID · test gjennomført'}</div>
+                  ) : null}
+                  {user?.role === 'superadmin' && d.document_identity_review_id ? (
+                    <div className="cell-sub">Stripe-ref. <span className="mono">{d.document_identity_review_id}</span></div>
+                  ) : null}
+                </td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -368,6 +388,11 @@ export function Drivers() {
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
                 <td>{d.online && hasRecentSignal(d.last_location_at) ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent · offline" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
+                  {user?.role === 'superadmin' && d.document_identity_review_id ? (
+                    <Btn variant="sm" disabled={!!reviewing} onClick={() => confirmIdentity(d)}>
+                      {reviewing === d.id ? 'Bekrefter…' : 'Bekreft ID'}
+                    </Btn>
+                  ) : null}
                   <Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>
                     {d.approved ? 'Suspender' : 'Godkjenn'}
                   </Btn>
@@ -762,12 +787,13 @@ function RefundModal({ onClose, onDone }: any) {
 /* ----------------------------- Support ----------------------------- */
 export function Support() {
   const [status, setStatus] = useState('open');
+  const [priority, setPriority] = useState('');
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
-  useEffect(() => { setPage(1); setSelectedId(null); }, [status]);
-  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/support/tickets', { status, page, page_size: PAGE });
+  useEffect(() => { setPage(1); setSelectedId(null); }, [status, priority]);
+  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/support/tickets', { status, priority, page, page_size: PAGE });
   const ticket = rows.find((t:any) => t.id === selectedId);
   const setTicket = async (id: string, next: string) => {
     setBusy(true); setActionError('');
@@ -777,16 +803,26 @@ export function Support() {
   };
   return <>
     <PageHead title="Support" sub={`${total} saker`} right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>}/>
-    <div className="toolbar"><select className="select" aria-label="Filtrer supportsaker" value={status} onChange={e => setStatus(e.target.value)}><option value="all">Alle</option><option value="open">Åpne</option><option value="in_progress">Under arbeid</option><option value="waiting_for_user">Venter bruker</option><option value="resolved">Løste</option><option value="closed">Lukkede</option></select></div>
+    <div className="toolbar">
+      <select className="select" aria-label="Filtrer supportsaker" value={status} onChange={e => setStatus(e.target.value)}><option value="all">Alle</option><option value="open">Åpne</option><option value="in_progress">Under arbeid</option><option value="waiting_for_user">Venter bruker</option><option value="resolved">Løste</option><option value="closed">Lukkede</option></select>
+      <select className="select" aria-label="Filtrer etter prioritet" value={priority} onChange={e => setPriority(e.target.value)}><option value="">Alle prioriteter</option><option value="kritisk">Kritiske</option></select>
+    </div>
     <ErrorBanner msg={err || actionError}/>
     <div className="support-layout">
       <section className="card"><div className="card-head"><h2 className="card-title">Innboks</h2><span className="card-sub">{total} saker</span></div>
-        {loading ? <Loader/> : rows.length ? rows.map((t:any) => <button className={`support-ticket ${selectedId === t.id ? 'selected' : ''}`} key={t.id} onClick={() => setSelectedId(t.id)}><strong>{t.subject || 'Uten emne'}</strong><span className="cell-sub">{t.category || '—'} · {fmtDate(t.created_at)}</span><div><Pill status={t.status}/> <Pill label={t.priority || 'Ukjent prioritet'}/></div></button>) : <Empty title="Ingen supportsaker"/>}
+        {loading ? <Loader/> : rows.length ? rows.map((t:any) => (
+          <button className={`support-ticket ${selectedId === t.id ? 'selected' : ''}`} key={t.id} onClick={() => setSelectedId(t.id)}>
+            <strong>{t.subject || 'Uten emne'}</strong><span className="cell-sub">{t.category || '—'} · {fmtDate(t.created_at)}</span>
+            <div><Pill status={t.status}/> <Pill status={t.priority === 'kritisk' ? 'cancelled' : undefined} label={t.priority || 'Ukjent prioritet'}/></div>
+          </button>
+        )) : <Empty title="Ingen supportsaker"/>}
         <Pagination page={page} totalPages={totalPages} total={total} onPage={(p:number) => {setPage(p);setSelectedId(null);}}/>
       </section>
       <Card>{ticket ? <>
         <h2 className="card-title" style={{marginBottom:16}}>{ticket.subject}</h2>
         <KV k="Saksnummer" v={<span className="mono">{ticket.id}</span>}/><KV k="Kategori" v={ticket.category}/><KV k="Prioritet" v={ticket.priority}/><KV k="Opprettet" v={fmtDate(ticket.created_at)}/>
+        {ticket.contact_email ? <KV k="Kontakt" v={ticket.contact_email}/> : null}
+        {ticket.trip_id ? <KV k="Tilknyttet tur" v={<Link to={`/trips?q=${encodeURIComponent(ticket.trip_id)}`}>Se tur</Link>}/> : null}
         <div className="section-title">Status</div><select className="select" aria-label="Endre saksstatus" value={ticket.status} disabled={busy} onChange={e => setTicket(ticket.id,e.target.value)}>{[['open','Åpen'],['in_progress','Under arbeid'],['waiting_for_user','Venter bruker'],['resolved','Løst'],['closed','Lukket']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
         {(ticket.description || ticket.message || ticket.body) && <><div className="section-title">Henvendelse</div><p style={{whiteSpace:'pre-wrap',lineHeight:1.7}}>{ticket.description || ticket.message || ticket.body}</p></>}
       </> : <Empty title="Velg en supportsak" sub="Se sakens detaljer og oppdater status."/>}</Card>

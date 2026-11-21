@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import httpx
 import mongomock
 import pytest
 from bson import ObjectId
@@ -18,7 +19,8 @@ from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from business_payment import business_card
 from customer_trip_context import confirmed_driver_identity, pickup_call_due
-from travel_context import parse_flights, transit_options
+from driver_document_identity import PROOF
+from travel_context import AVINOR_URL, PublicTravel, parse_flights, transit_options
 from vipps_payment import SECRETS, VippsReservations, valid_webhook, vipps_configured
 
 
@@ -49,6 +51,25 @@ def test_identity_badge_needs_review_and_disappears_when_recheck_is_due():
     asyncio.run(run())
 
 
+def test_identity_badge_accepts_only_live_document_proof_reviewed_for_the_current_verification():
+    async def run():
+        raw = mongomock.MongoClient().db
+        db = SimpleNamespace(users=AsyncMock(wraps=raw.users),
+                             driver_identity_verifications=AsyncMock(wraps=raw.driver_identity_verifications))
+        now = datetime.now(timezone.utc)
+        stamp = (now - timedelta(days=1)).isoformat()
+        driver_id = raw.users.insert_one({
+            "role": "driver", "approved": True, "identity_verification_status": "verified",
+            "identity_verified_at": stamp, PROOF: {"status": "verified", "livemode": False},
+        }).inserted_id
+        assert not await confirmed_driver_identity(db, str(driver_id), now)
+        raw.users.update_one({"_id": driver_id}, {"$set": {f"{PROOF}.livemode": True}})
+        assert not await confirmed_driver_identity(db, str(driver_id), now)
+        raw.users.update_one({"_id": driver_id}, {"$set": {f"{PROOF}.reviewed_at": stamp, f"{PROOF}.reviewed_by": "reviewer"}})
+        assert await confirmed_driver_identity(db, str(driver_id), now)
+    asyncio.run(run())
+
+
 def test_business_card_is_scoped_to_owner_mode_and_an_ordinary_card():
     async def run():
         raw = mongomock.MongoClient().db
@@ -74,6 +95,57 @@ def test_public_travel_parses_avinor_actual_feed_fields_and_rejects_graphql_erro
     assert flight["estimated_at"] == "2026-11-18T20:23:00+00:00"
     with pytest.raises(ValueError):
         transit_options({"errors": [{"message": "provider error"}]}, datetime.now(timezone.utc))
+
+
+def test_avinor_codeshares_use_oslo_calendar_date_and_a_single_cached_feed():
+    queries = []
+    xml = """<airport name="OSL"><flights>
+    <flight><flight_id>AY911</flight_id><schedule_time>2026-11-21T23:15:00Z</schedule_time>
+    <arr_dep>A</arr_dep><airport>HEL</airport><delayed>Y</delayed>
+    <codeshareairlinedesignators>BA;QR;JL</codeshareairlinedesignators>
+    <codeshareflightnumbers>6071;6145;9359</codeshareflightnumbers>
+    <codeshareoperationalsuffixs>;A;</codeshareoperationalsuffixs></flight>
+    <flight><flight_id>AY912</flight_id><schedule_time>2026-11-22T11:15:00Z</schedule_time>
+    <arr_dep>D</arr_dep><airport>HEL</airport></flight>
+    </flights></airport>"""
+
+    def feed(request):
+        queries.append(request)
+        return httpx.Response(200, text=xml)
+
+    async def run():
+        travel = PublicTravel(client_factory=lambda **kwargs: httpx.AsyncClient(transport=httpx.MockTransport(feed), **kwargs))
+        found = await travel.flight("QR6145A", "A", "2026-11-22")
+        assert found["flight"]["number"] == "AY911"
+        assert found["flight"]["requested_number"] == "QR6145A"
+        assert found["flight"]["delayed"] is True
+        assert (await travel.flight("BA6071", "A", "2026-11-21"))["flight"] is None
+        departure = await travel.flight("AY912", "D", "2026-11-22")
+        assert departure["flight"]["number"] == "AY912"
+        assert departure["as_of"] == found["as_of"]
+
+    asyncio.run(run())
+    assert len(queries) == 1
+    assert str(queries[0].url.copy_with(query=None)) == AVINOR_URL
+    assert dict(queries[0].url.params) == {"airport": "OSL", "TimeFrom": "26", "TimeTo": "49", "codeshare": "Y"}
+
+
+def test_avinor_failure_respects_refresh_window_without_false_missing_status():
+    fetches = 0
+
+    def feed(_request):
+        nonlocal fetches
+        fetches += 1
+        return httpx.Response(503)
+
+    async def run():
+        travel = PublicTravel(client_factory=lambda **kwargs: httpx.AsyncClient(transport=httpx.MockTransport(feed), **kwargs))
+        for error in (httpx.HTTPStatusError, ValueError):
+            with pytest.raises(error):
+                await travel.flight("SK123", "A", "2026-11-21")
+
+    asyncio.run(run())
+    assert fetches == 1
 
 
 @pytest.fixture

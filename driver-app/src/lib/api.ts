@@ -177,6 +177,7 @@ export const driverApi = {
     return api.post('/driver/profile-photo', form).then((r) => r.data);
   },
   identityVerification: () => api.get('/driver/identity-verification').then((r) => r.data),
+  startDocumentIdentity: () => api.post('/driver/identity-verification/document/start').then(r => r.data),
   submitIdentitySelfie: (uri: string) => {
     const form = new FormData();
     form.append('file', {

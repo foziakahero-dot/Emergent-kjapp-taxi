@@ -1,6 +1,6 @@
 import { Text } from '@/src/components/Typography';
-import React, { useEffect, useRef, useState } from 'react';
-import { Image, Linking, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Image, Linking, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -14,6 +14,11 @@ import { V10Entrance } from '@/src/components/V10Entrance';
 import { apiError, driverApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
+type DocumentProof = {
+  status: 'creating' | 'requires_input' | 'processing' | 'verified' | 'canceled';
+  mode: 'test' | 'live';
+};
+
 type Verification = {
   status?: 'not_submitted' | 'pending_review' | 'verified' | 'retry_required' | string;
   submitted_at?: string | null;
@@ -24,6 +29,9 @@ type Verification = {
   next_identity_check_at?: string | null;
   identity_verified_at?: string | null;
   recheck_deferred_until_trip_end?: boolean;
+  document_available?: boolean;
+  document_mode?: 'test' | 'live' | null;
+  document_identity?: DocumentProof | null;
 };
 
 const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn' | 'neutral' }> = {
@@ -68,15 +76,25 @@ export default function DriverIdentity() {
   const [err, setErr] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
   const operation = useRef(false), alive = useRef(true);
+  const returningFromStripe = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setErr('');
     try { const result = await driverApi.identityVerification(); if (!result?.status) throw new Error('Identitetsstatus ble ikke bekreftet.'); if (alive.current) setVerification(result); }
     catch (e) { if (alive.current) setErr(apiError(e)); }
-  };
+  }, []);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active' && returningFromStripe.current) {
+        returningFromStripe.current = false;
+        void load();
+      }
+    });
+    return () => subscription.remove();
+  }, [load]);
 
   const openCamera = async () => {
     if (operation.current) return;
@@ -128,8 +146,37 @@ export default function DriverIdentity() {
     }
   };
 
+  const openDocumentCheck = async () => {
+    if (operation.current) return;
+    operation.current = true;
+    setBusy(true);
+    setErr('');
+    try {
+      const result = await driverApi.startDocumentIdentity();
+      if (!result?.proof?.status) throw new Error('Stripe bekreftet ikke kontrollen.');
+      if (!alive.current) return;
+      setVerification(current => current ? { ...current, document_identity: result.proof } : current);
+      if (result.verification_url) {
+        const target = new URL(result.verification_url);
+        if (target.origin !== 'https://verify.stripe.com') throw new Error('ID-kontrollen ga en ugyldig lenke.');
+        returningFromStripe.current = true;
+        await Linking.openURL(result.verification_url);
+      }
+    } catch (error) {
+      returningFromStripe.current = false;
+      if (alive.current) setErr(apiError(error));
+    } finally {
+      operation.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
+
   const status = verification?.status === 'verified' && user?.identity_recheck_required ? 'recheck_required' : verification?.status || 'not_submitted';
   const meta = STATUS[status] || { title: 'Ukjent kontrollstatus', body: 'Oppdater kontrollstatus før du fortsetter.', tone: 'neutral' as const };
+  const documentProof = verification?.document_identity;
+  const testDocument = (documentProof?.mode || verification?.document_mode) === 'test';
+  const initialDocumentChoice = status === 'not_submitted' && (verification?.document_available || documentProof);
+  const canOpenDocument = verification?.document_available && documentProof?.status !== 'verified' && documentProof?.status !== 'processing';
 
   if (cameraOpen || photo) return <V10Entrance fade testID="driver-identity-camera-screen" style={{ flex: 1, backgroundColor: '#0a141f', alignItems: 'center', paddingTop: Math.max(110, insets.top + 48), paddingHorizontal: 24 }}>
     <StatusBar style="light" />
@@ -142,17 +189,29 @@ export default function DriverIdentity() {
   </V10Entrance>;
   return <V10Screen testID="driver-identity-screen"><V10Entrance fade><V10Header onBack={() => router.back()} />
     {!verification ? err ? <V10State warning icon="wifiOff" title="Kunne ikke hente identitetsstatus" body={err} action="Prøv igjen" onAction={() => void load()} /> : <Loader /> : <>
-      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="camera" size={26} /></View><Text style={[v10.title, { marginTop: 18 }]}>Bekreft at det er deg</Text><Text style={[v10.secondary, { marginTop: 8 }]}>Passasjerer stoler på at sjåføren i appen er den som kjører. Ta en fersk selfie. SNAR kontrollerer bildet manuelt.</Text>
-      <View style={{ marginTop: 16, gap: 6 }}><V10Badge tone={meta.tone === 'good' ? 'positive' : meta.tone === 'warn' ? 'warning' : 'neutral'}>{meta.title}</V10Badge><Text style={v10.secondary}>{meta.body}</Text>
+      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="camera" size={26} /></View><Text style={[v10.title, { marginTop: 18 }]}>Bekreft at det er deg</Text>
+      {verification.document_available || documentProof ? <V10Group style={{ marginTop: 16, padding: 12, gap: 8 }}>
+        <Text style={v10.body}>{testDocument ? 'Dokumentkontroll med Stripe · Testmodus' : 'Dokumentkontroll med Stripe'}</Text>
+        <Text style={v10.secondary}>{documentProof?.status === 'verified'
+          ? (documentProof.mode === 'test' ? 'Testkontrollen er fullført.' : 'Stripe har bekreftet dokumentkontrollen. Søknaden behandles av SNAR.')
+          : documentProof?.status === 'processing'
+            ? 'Stripe behandler dokumentene.'
+            : testDocument
+              ? 'Bruk Stripes testvalg for å simulere en dokumentkontroll.'
+              : 'Vis legitimasjon og bekreft at den tilhører deg på Stripes sikre side.'}</Text>
+        {canOpenDocument ? <V10Action label={documentProof?.status === 'requires_input' ? 'Fortsett hos Stripe' : 'Start ID-kontroll'} onPress={() => void openDocumentCheck()} busy={busy} testID="driver-document-id-start" /> : null}
+        {documentProof && documentProof.status !== 'verified' ? <V10Action kind="soft" label="Sjekk ID-status" disabled={busy} onPress={() => void load()} testID="driver-document-id-status" /> : null}
+      </V10Group> : null}
+      {!initialDocumentChoice && <View style={{ marginTop: 16, gap: 6 }}><V10Badge tone={meta.tone === 'good' ? 'positive' : meta.tone === 'warn' ? 'warning' : 'neutral'}>{meta.title}</V10Badge><Text style={v10.secondary}>{meta.body}</Text>
         {verification.review_reason ? <Text style={v10.caption}>SNAR: {verification.review_reason}</Text> : null}{verification.recheck_reason ? <Text style={v10.caption}>Kontrollårsak: {verification.recheck_reason}</Text> : null}
         {verification.recheck_deferred_until_trip_end ? <Text style={v10.caption}>Kontrollen aktiveres når den aktive turen er avsluttet.</Text> : null}
         {verification.next_identity_check_at && status === 'verified' && Number.isFinite(new Date(verification.next_identity_check_at).getTime()) ? <Text style={v10.caption}>Neste planlagte kontroll: {new Date(verification.next_identity_check_at).toLocaleDateString('nb-NO')}</Text> : null}
-      </View>
+      </View>}
       <V10Group style={{ marginTop: 20 }}><V10Row icon="sun" title="Godt lys foran deg" /><V10Row border icon="user" title="Ta av lue og solbriller" /><V10Row border icon="lock" title="Kun brukt til verifisering" /></V10Group>
-      <View style={{ marginTop: 24 }}>{status !== 'pending_review' ? <V10Action label={status === 'verified' ? 'Ta ny identitetsselfie' : 'Start kamera'} onPress={() => void openCamera()} busy={busy} testID="driver-identity-camera" /> : <V10Action kind="soft" label="Sjekk kontrollstatus" onPress={() => void load()} testID="driver-identity-refresh" />}</View>
+      <View style={{ marginTop: 24 }}>{status !== 'pending_review' ? <V10Action label={initialDocumentChoice ? 'Bruk manuell ID-kontroll' : status === 'verified' ? 'Ta ny identitetsselfie' : 'Start kamera'} onPress={() => void openCamera()} busy={busy} testID="driver-identity-camera" /> : <V10Action kind="soft" label="Sjekk kontrollstatus" onPress={() => void load()} testID="driver-identity-refresh" />}</View>
       {status === 'verified' && user?.approved === true && !user.identity_recheck_required ? <View style={{ marginTop: 8 }}><V10Action kind="ink" label="Fortsett" onPress={() => router.replace('/')} testID="driver-identity-continue" /></View> : null}
       {!permission?.granted && permission?.canAskAgain === false ? <V10Action kind="ghost" label="Åpne kamerainnstillinger" onPress={() => void Linking.openSettings().catch(() => setErr('Kunne ikke åpne telefonens innstillinger.'))} /> : null}
-      {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{err}</Text> : null}<Text style={[v10.caption, { marginTop: 16 }]}>Løyvehaver ser bare verifiseringsstatus. Selfien er privat og kan bare åpnes av deg og SNAR-administratorer.</Text>
+      {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{err}</Text> : null}<Text style={[v10.caption, { marginTop: 16 }]}>Selfier fra manuell kontroll kan bare åpnes av deg og SNAR-administratorer.</Text>
     </>}
   </V10Entrance></V10Screen>;
 }

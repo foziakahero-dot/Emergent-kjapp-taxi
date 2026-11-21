@@ -21,16 +21,21 @@ def endpoints(key='fixture-key'):
     source = ast.parse(Path(__file__).resolve().parents[1].joinpath('server.py').read_text())
     nodes = []
     for node in source.body:
-        if isinstance(node, ast.AsyncFunctionDef) and node.name in {'ai_chat', 'create_public_support_ticket', 'admin_tickets'}:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name in {
+            'ai_chat', 'create_public_support_ticket', 'create_customer_support_case', '_owned_support_trip', 'admin_tickets',
+        }:
             node.decorator_list = []
             nodes.append(node)
     chats = SimpleNamespace(insert_one=AsyncMock())
-    tickets = SimpleNamespace(insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id='confirmed-ticket')))
+    tickets = SimpleNamespace(insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id='confirmed-ticket')),
+                              update_one=AsyncMock())
     context = {'support_answers':support_answers, 'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'APP_ENV':'qa', 'provider_chat_session':provider_chat_session,
                'logging':logging, 'ChatRequest':object, 'PublicSupportRequest':object,
-               'Request':object, 'Depends':lambda value:None, 'get_current_user':None,
+               'Request':object, 'Depends':lambda value:None, 'get_current_user':None, 'require_customer':None,
                'HTTPException':HTTPException, '_enforce_rate_limit':AsyncMock(),
-               'db':SimpleNamespace(chat_messages=chats, support_tickets=tickets),
+               'db':SimpleNamespace(chat_messages=chats, support_tickets=tickets,
+                                    trips=SimpleNamespace(find_one=AsyncMock(return_value=None))),
+               '_real_trip_filter':lambda query:query,
                'datetime':datetime, 'timezone':timezone, 'asyncio':asyncio,
                'Optional':Optional, 'require_admin':None,
                '_page_params':lambda page,size:(page,size,(page-1)*size),
@@ -39,8 +44,9 @@ def endpoints(key='fixture-key'):
     return context, chats, tickets
 
 class SupportChatTests(unittest.IsolatedAsyncioTestCase):
-    async def invoke(self, ctx, text=' Actual support question '):
-        return await ctx['ai_chat'](SimpleNamespace(message=text,session_id='support-session'),None,{'id':'actual-user'})
+    async def invoke(self, ctx, text=' Actual support question ', trip_id=None):
+        return await ctx['ai_chat'](SimpleNamespace(message=text, session_id='support-session', trip_id=trip_id),
+                                    None, {'id':'actual-user'})
 
     async def test_qa_missing_key_returns_clear_503_without_provider_or_chat_write(self):
         ctx,chats,_=endpoints('')
@@ -90,6 +96,76 @@ class SupportChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collection.find.call_args.args[0],{"user_id":"eier","session_id":"økt","_id":{"$lt":12}})
         payload=client.post.await_args.kwargs["json"]
         self.assertEqual([msg["content"] for msg in payload["messages"]],["Regler","Første spørsmål","Forrige svar","Oppfølging"])
+
+    async def test_openai_receives_sanitized_context_and_excludes_restricted_conversation(self):
+        collection = Mock()
+
+        class History:
+            async def __aiter__(self):
+                for row in [
+                    {"role": "user", "content": "Sjåføren truet meg"},
+                    {"role": "user", "content": "Kvittering til kunde@example.test"},
+                ]:
+                    yield row
+
+        collection.find.return_value.sort.return_value.limit.return_value = History()
+        client = AsyncMock()
+        response = Mock()
+        response.json.return_value = {
+            "status": "completed", "output": [{"type": "message", "role": "assistant",
+                                                "content": [{"type": "output_text", "text": "Svar"}]}],
+        }
+        client.post.return_value = response
+        with patch.object(support_answers.httpx, "AsyncClient") as factory:
+            factory.return_value.__aenter__.return_value = client
+            reply = await support_answers.openai_reply(
+                "fixture", "Regler", collection, "eier", "økt", 12, "Kvittering. Passord: testverdi",
+            )
+        self.assertEqual(reply, "Svar")
+        args, kwargs = client.post.await_args
+        self.assertEqual(args[0], "https://api.openai.com/v1/responses")
+        self.assertFalse(kwargs["json"]["store"])
+        self.assertEqual([row["content"] for row in kwargs["json"]["input"]],
+                         ["Kvittering til [skjult]", "Kvittering. [skjult]"])
+        self.assertEqual(collection.find.call_args.args[0], {"user_id": "eier", "session_id": "økt", "_id": {"$lt": 12}})
+
+    async def test_critical_cases_go_to_admin_before_any_ai_call_and_are_retry_safe(self):
+        ctx, chats, tickets = endpoints('')
+        message = "Sjåføren truet meg. Kontakt kunde@example.test."
+        with patch.object(support_answers, "openai_key", return_value="configured"), \
+                patch.object(support_answers, "openai_reply", new_callable=AsyncMock) as provider:
+            first = await self.invoke(ctx, message, "someone-elses-trip")
+            second = await self.invoke(ctx, message, "someone-elses-trip")
+            provider.assert_not_awaited()
+        self.assertEqual(first["ticket_id"], second["ticket_id"])
+        self.assertIn("112", first["reply"])
+        case = tickets.update_one.await_args.args[1]["$setOnInsert"]
+        self.assertEqual(case["priority"], "kritisk")
+        self.assertEqual(case["created_by"], "actual-user")
+        self.assertIsNone(case["trip_id"])
+        self.assertNotIn("kunde@example.test", str(chats.insert_one.await_args_list))
+
+    async def test_owned_trip_status_uses_the_server_lookup_without_accessing_ai(self):
+        ctx, _, tickets = endpoints('')
+        trips = ctx["db"].trips
+        trips.find_one.return_value = {"trip_id": "my-trip", "status": "driver_on_way"}
+        answer = await self.invoke(ctx, "Hvor er sjåføren?", "my-trip")
+        self.assertEqual(answer["reply"], support_answers.TRIP_STATUS["driver_on_way"])
+        self.assertEqual(trips.find_one.await_args.args[0], {"trip_id": "my-trip", "user_id": "actual-user"})
+        case = await ctx['create_customer_support_case'](
+            SimpleNamespace(message="Jeg trenger hjelp med turen", session_id="support-session", trip_id="my-trip"),
+            None, {"id": "actual-user"},
+        )
+        self.assertTrue(case["ticket_id"])
+        self.assertEqual(tickets.update_one.await_args.args[1]["$setOnInsert"]["trip_id"], "my-trip")
+
+    async def test_restricted_topic_does_not_go_to_the_provider(self):
+        ctx, _, _ = endpoints('')
+        with patch.object(support_answers, "openai_key", return_value="configured"), \
+                patch.object(support_answers, "openai_reply", new_callable=AsyncMock) as provider:
+            result = await self.invoke(ctx, "Hvor mye får sjåføren i lønn?")
+            self.assertEqual(result["reply"], support_answers.SCOPE_REPLY)
+            provider.assert_not_awaited()
 
     async def test_blank_or_oversized_message_rejected_before_provider_or_write(self):
         for text in ['   ','x'*4001]:
