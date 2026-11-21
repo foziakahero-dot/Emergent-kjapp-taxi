@@ -111,7 +111,15 @@ def test_cancel_releases_hold_even_if_authorization_callback_arrives_late():
         raw.trips.update_one({'trip_id':'t'},{'$set':{'status':'cancelled'}})
         await s.release(t);record=await s.record(t)
         assert pi.objects[record['stripe_payment_intent_id']]['status']=='canceled' and pi.captures==0
-        assert raw.trips.find_one({'trip_id':'t'})['reservation_status']=='released'
+        cancelled = raw.trips.find_one({'trip_id': 't'})
+        assert cancelled['reservation_status'] == 'released'
+        assert cancelled['payment_status'] == 'not_due'
+        assert record['payment_status'] == 'released'
+        # Older trips can already show a released hold and still say "reserved".
+        raw.trips.update_one({'trip_id': 't'}, {'$set': {'payment_status': 'reserved'}})
+        await s.release(cancelled)
+        assert raw.trips.find_one({'trip_id': 't'})['payment_status'] == 'not_due'
+        assert pi.captures == 0
     run(check())
 
 
