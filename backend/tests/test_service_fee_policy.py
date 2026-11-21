@@ -2,7 +2,16 @@ import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from service_fee_policy import configured_service_fee, commission_source
+from service_fee_policy import configured_service_fee, commission_source, new_trip_terms
+
+
+@pytest.mark.parametrize("payments", [
+    {"enabled": False, "test_mode": True},
+    {"enabled": True, "test_mode": False},
+])
+def test_qa_fee_switch_cannot_activate_without_enabled_test_payments(monkeypatch, payments):
+    monkeypatch.setenv("QA_PER_RIDE_FEE_TEST_ENABLED", "true")
+    assert new_trip_terms("qa", payments)["commission_rate"] == 0.0
 
 
 def test_twelve_percent_override_preserves_booking_snapshot_policy(monkeypatch):

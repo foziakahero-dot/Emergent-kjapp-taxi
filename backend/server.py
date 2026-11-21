@@ -56,7 +56,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
-from service_fee_policy import subscription_trip_terms, saved_trip_rate
+from service_fee_policy import new_trip_terms, saved_trip_rate
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -2338,7 +2338,7 @@ async def trip_estimate(body: EstimateRequest):
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
                         "waiting_policy": waiting_policy(effective_pricing, vt)})
-    commission_rate = subscription_trip_terms()["commission_rate"]
+    commission_rate = new_trip_terms(APP_ENV, configured_payments(stripe))["commission_rate"]
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
@@ -3040,7 +3040,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "pricing_version": quote["pricing_version"],
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
-        **subscription_trip_terms(),
+        **new_trip_terms(APP_ENV, configured_payments(stripe)),
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
