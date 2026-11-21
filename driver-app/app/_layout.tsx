@@ -1,3 +1,4 @@
+import { canOpenDriverScreen } from '@/src/lib/driverAccess';
 import * as SplashScreen from 'expo-splash-screen';
 import { LaunchSplash } from '@/src/components/SplashArt';
 import { useReducedMotion } from '@/src/components/Motion';
@@ -5,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, router, usePathname } from 'expo-router';
+import { Redirect, Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, View } from 'react-native';
 import { useFonts } from 'expo-font';
@@ -27,6 +28,13 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
+
+function DriverScreen({ name, children }: { name: string; children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user === undefined) return null;
+  if (!canOpenDriverScreen(user, name)) return <Redirect href="/driver-approval" />;
+  return <>{children}</>;
+}
 
 function NativeRuntimeBridge() {
   const pathname = usePathname();
@@ -100,7 +108,7 @@ function NativeRuntimeBridge() {
   }, [user?.id, user?.role, user?.approved, user?.legal_accepted, user?.identity_verification_required, user?.identity_verified_at, refresh]);
 
   useEffect(() => {
-    if (Platform.OS === 'web' || user?.role !== 'driver') return;
+    if (Platform.OS === 'web' || user?.role !== 'driver' || user?.approved !== true) return;
     let active = true;
     let sub: { remove: () => void } | undefined;
     const open = (notification?: Notifications.Notification | null) => {
@@ -119,7 +127,7 @@ function NativeRuntimeBridge() {
       }
     })();
     return () => { active = false; sub?.remove(); };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   return null;
 }
@@ -151,6 +159,7 @@ export default function RootLayout() {
             <NativeRuntimeBridge />
             <StatusBar style={theme.effective === 'dark' ? 'light' : 'dark'} />
             <Stack
+              screenLayout={({ route, children }) => <DriverScreen name={route.name}>{children}</DriverScreen>}
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: colors.driverBg },

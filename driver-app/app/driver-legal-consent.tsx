@@ -28,6 +28,7 @@ export default function DriverLegalConsent() {
     setError('');
     try {
       const updated = await acceptLegal();
+      if (updated?.approved !== true) { router.replace('/driver-approval'); return; }
       const identityGate = updated?.identity_verification_required === true || updated?.identity_recheck_required === true;
       router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
     } catch (e) {

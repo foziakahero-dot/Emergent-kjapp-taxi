@@ -10,7 +10,7 @@ const host = name => ({children,...props}) => React.createElement(name, props, c
 const noop = () => {};
 let mode = 'share', trips = null, readTrip = async () => trips, pickup = async (_id,value) => ({ok:true,waiting_inside:value});
 let shareLink = async () => ({url:'https://qa.example.invalid/tur/fixture'}), ai = async () => {throw {response:{status:503}};};
-let ticket = async () => ({data:{ok:true,ticket_id:'fixture-ticket'}}), failStorage = false;
+let ticket = async () => ({ok:true,ticket_id:'fixture-ticket'}), failStorage = false;
 let shareCalls = 0, pickupCalls = 0, ticketCalls = 0, aiCalls = 0, exportCalls = 0, nativeImports = 0;
 let user = {id:'fixture-customer',email:'qa@example.invalid',fullName:'QA Customer',legal_accepted:true}, backCalls = 0;
 let placeRecords = [], placeWrites = [];
@@ -34,7 +34,7 @@ const stubs = {
  '@/src/components/Motion':{useReducedMotion:()=>true},
  '@/src/components/ui':{Button:host('Button'),Loader:host('Loader')},
  '@/src/lib/format':{apiError:e=>e?.response?.data?.detail||e?.message||'Request failed'},
- '@/src/lib/api':{tripsApi:{active:()=>readTrip(),pickupPreference:(...args)=>{pickupCalls++;return pickup(...args);}},safetyApi:{shareLink:(...args)=>shareLink(...args),log:async()=>({ok:true})},gdprApi:{export:async()=>{exportCalls++;return {trips:[]};},delete:async()=>{throw Error('Deletion not invoked by these tests');}},aiApi:{chat:(...args)=>{aiCalls++;return ai(...args);}},api:{post:(...args)=>{ticketCalls++;return ticket(...args);}}},
+ '@/src/lib/api':{tripsApi:{active:()=>readTrip(),pickupPreference:(...args)=>{pickupCalls++;return pickup(...args);}},safetyApi:{shareLink:(...args)=>shareLink(...args),log:async()=>({ok:true})},gdprApi:{export:async()=>{exportCalls++;return {trips:[]};},delete:async()=>{throw Error('Deletion not invoked by these tests');}},aiApi:{chat:(...args)=>{aiCalls++;return ai(...args);}},customerSupportApi:{createCase:(...args)=>{ticketCalls++;return ticket(...args);}}},
 };
 let backHandler, hasHistory=true;
 stubs['react-native'].AppState={currentState:'active',addEventListener:()=>({remove:noop})};
@@ -151,8 +151,8 @@ test('privacy opens without settings API or native export module and stays on sc
 test('AI 503 preserves draft and offers human support; only confirmed ticket clears draft',async()=>{
  const page=await mount(Support,{onBack:noop,initialMessage:'Jeg trenger hjelp til en testtur.'}),{tree}=page;
  await act(async()=>node(tree,'support-send').props.onPress());assert.equal(aiCalls,1);assert.equal(ticketCalls,0);assert.ok(node(tree,'support-human-fallback'));assert.equal(node(tree,'support-retry'),undefined);assert.ok(node(tree,'support-message-input').props.value.includes('testtur'));
- ticket=async()=>({data:{ok:false}});await act(async()=>node(tree,'support-human-send').props.onPress());assert.equal(ticketCalls,1);assert.ok(node(tree,'support-message-input').props.value.includes('testtur'));assert.ok(!text(tree).includes('fixture-ticket'));
- ticket=async()=>({data:{ok:true,ticket_id:'fixture-ticket'}});await act(async()=>node(tree,'support-human-send').props.onPress());assert.equal(ticketCalls,2);assert.equal(node(tree,'support-message-input').props.value,'');assert.equal(node(tree,'support-human-fallback'),undefined);assert.ok(text(tree).includes('fixture-ticket'));assert.equal(aiCalls,1);await page.close();
+ ticket=async()=>({ok:false});await act(async()=>node(tree,'support-human-send').props.onPress());assert.equal(ticketCalls,1);assert.ok(node(tree,'support-message-input').props.value.includes('testtur'));assert.ok(!text(tree).includes('fixture-ticket'));
+ ticket=async()=>({ok:true,ticket_id:'fixture-ticket'});await act(async()=>node(tree,'support-human-send').props.onPress());assert.equal(ticketCalls,2);assert.equal(node(tree,'support-message-input').props.value,'');assert.equal(node(tree,'support-human-fallback'),undefined);assert.ok(text(tree).includes('fixture-ticket'));assert.equal(aiCalls,1);await page.close();
 });
 
 

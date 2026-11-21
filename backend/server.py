@@ -553,6 +553,25 @@ def user_public(user: dict) -> dict:
     return result
 
 
+async def _invited_driver_can_onboard(user: dict) -> bool:
+    if (user.get("role") != "driver" or user.get("approved") is not False
+            or not user.get("id") or user.get("disabled") or user.get("fleet_active") is False):
+        return False
+    if await _fleet_is_suspended(user.get("fleet_id")):
+        return False
+    invitation = await db.driver_invites.find_one({
+        "used_by": user["id"], "used": True, "fleet_id": user["fleet_id"],
+    }, {"_id": 1})
+    return invitation is not None
+
+
+async def driver_session_view(user: dict) -> dict:
+    public = user_public(user)
+    if public["role"] == "driver" and public.get("approved") is False:
+        public["driver_onboarding_allowed"] = await _invited_driver_can_onboard(public)
+    return public
+
+
 def _session_is_current(payload: dict, user: dict) -> bool:
     # Legacy JWTs remain valid until this account resets its password. Fractional
     # seconds prevent a token minted just before a reset from surviving that reset.
@@ -2567,7 +2586,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     account_email = str(user.get("email") or "").strip().lower()
     token = create_access_token(uid, account_email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": user_public(user)}
+    return {"token": token, "user": await driver_session_view(user)}
 
 
 @api.post("/auth/logout")
@@ -2704,7 +2723,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": user_public(user)}
+    return {"token": token, "user": await driver_session_view(user)}
 
 
 # ---- Password reset via e-postlenke ----
@@ -2843,7 +2862,7 @@ async def change_password(body: ChangePasswordRequest, request: Request, respons
     token = create_access_token(current["id"], user.get("email") or "")
     set_auth_cookie(response, token)
     fresh = await db.users.find_one({"_id": user["_id"]})
-    return {"token": token, "user": user_public(fresh)}
+    return {"token": token, "user": await driver_session_view(fresh)}
 
 
 @api.get("/auth/legal-config")
@@ -2874,7 +2893,7 @@ async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_use
     updated = await db.users.find_one({"_id": oid})
     if not updated:
         raise HTTPException(status_code=404, detail="Bruker ikke funnet")
-    return user_public(updated)
+    return await driver_session_view(updated)
 
 
 @api.get("/auth/me")
@@ -2895,7 +2914,7 @@ async def me(current=Depends(get_current_user)):
             current["car"] = vehicle.get("car")
             current["plate"] = vehicle.get("plate")
             current["vehicle_type"] = vehicle.get("vehicle_type") or "ai-first"
-    public = user_public(current)
+    public = await driver_session_view(current)
     if current.get("role", "user") in ("user", "customer"):
         photo = await db.customer_photos.find_one({"_id": current["id"]}, {"version": 1})
         public["customer_photo_version"] = (photo or {}).get("version")
@@ -9655,6 +9674,12 @@ async def _require_driver_identity_user(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("disabled"):
         raise HTTPException(status_code=403, detail="Sjåførkontoen er deaktivert")
+    if current.get("fleet_active") is False:
+        raise HTTPException(status_code=403, detail="Sjåføren er deaktivert i flåten")
+    if current.get("approved") is True:
+        await _require_active_fleet(current.get("fleet_id"))
+    elif not await _invited_driver_can_onboard(current):
+        raise HTTPException(status_code=403, detail="Bekreftet flåteinvitasjon kreves for ID-kontroll")
     return current
 
 

@@ -1,3 +1,4 @@
+import { isPendingDriver } from '@/src/lib/driverAccess';
 import { SnarWordmark } from '@/src/components/SnarWordmark';
 import { V10Action, v10 } from '@/src/components/V10UI';
 import { Text, TextInput } from '@/src/components/Typography';
@@ -39,6 +40,7 @@ export default function DriverLogin() {
       if (!res) return;
       if (res?.twofa_required) { setError('Kontoen krever tofaktor — logg inn via web-portalen.'); return; }
       if (res?.role !== 'driver') { await logout(); setError('Denne kontoen er ikke en SNAR-sjåførkonto.'); return; }
+      if (isPendingDriver(res)) { router.replace('/driver-approval'); return; }
       if (res?.approved !== true) {
         await logout(); setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.'); return;
       }

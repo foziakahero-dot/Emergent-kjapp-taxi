@@ -85,7 +85,7 @@ test('cash can be selected without a card and is hidden when disabled',async()=>
 test('cash review discloses direct payment and never promises a card hold',async()=>{
   let tree;const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');
   await renderer.act(async()=>{tree=renderer.create(React.createElement(CustomerBookingView,{...booking,reviewing:true}));});
-  assert.match(text(tree),/Kontant til sjåføren/);assert.match(text(tree),/Ingen kortbelastning/);assert.doesNotMatch(text(tree),/Reserverer opptil/);
+  assert.match(text(tree),/Kontant til sjåføren/);assert.match(text(tree),/betaler turen og eventuell ventetid kontant til sjåføren etter turen/i);assert.doesNotMatch(text(tree),/Reserverer opptil/);
   assert.equal(byId(tree,'booking-confirm').props.disabled,false);
   await renderer.act(async()=>tree.unmount());
 });
@@ -146,7 +146,8 @@ test('automatic refresh updates displayed server fares and stale prices cannot b
   await renderer.act(async()=>tree.update(render(227,false)));
   assert.equal(byId(tree,'vehicle-suv').props.disabled,true);
   await renderer.act(async()=>byId(tree,'vehicle-suv').props.onPress());assert.equal(chosen,undefined);
-  assert.match(text(tree),/Oppdaterer prisene/);
+  assert.match(text(tree),/Henter ny pris/);
+  assert.match(byId(tree,'vehicle-suv').props.accessibilityLabel,/Oppdaterer pris/);
   await renderer.act(async()=>tree.unmount());
 });
 
