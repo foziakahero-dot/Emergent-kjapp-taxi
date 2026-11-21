@@ -37,6 +37,9 @@ function FlightContext({ direction, userId }: { direction: 'A' | 'D'; userId?: s
     enabled: !!lookup, staleTime: 180000, retry: false,
   });
   const flight = query.data?.flight;
+  const flightStatus = flight?.delayed && !['A', 'C', 'D'].includes(flight.status_code)
+    ? 'Forsinket'
+    : flightStatuses[flight?.status_code] || 'Planlagt';
   const submit = () => {
     if (!day || !/^[A-Z0-9]{2,3}\d{1,4}[A-Z]?$/.test(normalized)) return;
     if (lookup?.number === normalized && lookup?.day === day) void query.refetch();
@@ -57,13 +60,14 @@ function FlightContext({ direction, userId }: { direction: 'A' | 'D'; userId?: s
     {lookup && query.isError ? <Text style={v10.caption}>Flystatus er midlertidig utilgjengelig.</Text> : null}
     {lookup && query.isSuccess && !flight ? <Text style={v10.caption}>Fant ikke flyet denne dagen. Sjekk flynummeret og datoen.</Text> : null}
     {lookup && flight ? <View testID="travel-flight-result" style={{ gap: 4 }}>
-      <Text style={v10.body}>{flight.number} · {flightStatuses[flight.status_code] || 'Planlagt'} · {flight.other_airport || 'OSL'}</Text>
+      <Text style={v10.body}>{flight.requested_number || flight.number} · {flightStatus} · {flight.other_airport || 'OSL'}</Text>
+      {flight.requested_number && flight.requested_number !== flight.number ? <Text style={v10.caption}>Operativt flynummer {flight.number}</Text> : null}
       <Text style={v10.secondary}>Rutetid {clock(flight.scheduled_at)}{flight.estimated_at ? ` · ${flight.status_code === 'A' || flight.status_code === 'D' ? 'Faktisk' : 'Oppdatert'} ${dateAndTime(flight.estimated_at)}` : ''}</Text>
       {direction === 'A' && flight.status_code !== 'C' ? <Text style={v10.caption}>Beregn tid til bagasje og utgang etter landing før du bestiller.</Text> : null}
       {direction === 'D' && flight.status_code === 'E' ? <Text style={v10.caption}>Sjekk innsjekkingsfristen hos flyselskapet før du endrer avreisetiden.</Text> : null}
-      <Text style={v10.caption}>Kilde · Avinor</Text>
+      {query.data?.as_of ? <Text style={v10.caption}>Hentet {dateAndTime(query.data.as_of)}</Text> : null}
     </View> : null}
-    <V10Action small kind="ghost" label="Se flyinformasjon hos Avinor" onPress={() => void Linking.openURL(avinorFlights).catch(() => {})} />
+    <V10Action small kind="ghost" label="Flydata fra Avinor" onPress={() => void Linking.openURL(avinorFlights).catch(() => {})} />
   </View>;
 }
 
@@ -138,7 +142,7 @@ export function RideTravelContext({ userId, pickup, destination, driveMinutes, p
       {estimatedDrive && typeof price === 'number' ? <Text style={v10.secondary}>SNAR · {Math.ceil(driveMinutes)} min kjøring · {kr(price)}</Text> : null}
       <V10Action small kind="ghost" label="Se billettpris hos Ruter" onPress={() => void Linking.openURL(ruterTickets).catch(() => {})} />
     </> : null}
-    {direction ? <FlightContext direction={direction} userId={userId} /> : null}
+    {direction ? <FlightContext key={direction} direction={direction} userId={userId} /> : null}
     {Platform.OS !== 'web' && estimatedDrive ? <CalendarContext driveMinutes={driveMinutes} destination={destination.name} /> : null}
   </V10Group>;
 }

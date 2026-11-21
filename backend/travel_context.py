@@ -1,6 +1,7 @@
 """Public travel information used by the customer booking screen."""
 import asyncio
 import math
+import re
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -15,6 +16,8 @@ from pydantic import BaseModel, Field
 ENTUR_URL = "https://api.entur.io/journey-planner/v3/graphql"
 WEATHER_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 AVINOR_URL = "https://asrv.avinor.no/XmlFeed/v1.0"
+AVINOR_REFRESH = timedelta(minutes=3)
+FLIGHT_NUMBER = re.compile(r"^[A-Z0-9]{2,3}\d{1,4}[A-Z]?$")
 OSLO = ZoneInfo("Europe/Oslo")
 CLIENT_NAME = "SNAR/1.0 https://snarapp.no"
 TIMEOUT = httpx.Timeout(6, connect=3)
@@ -113,7 +116,7 @@ def expires_at(header, now):
 
 
 def parse_flights(xml):
-    if len(xml) > 2_000_000 or any(marker in xml.upper() for marker in (b"<!DOCTYPE", b"<!ENTITY")):
+    if len(xml) > 2_000_000 or b"\x00" in xml or any(marker in xml.upper() for marker in (b"<!DOCTYPE", b"<!ENTITY")):
         raise ValueError("Unexpected Avinor feed")
     root = ElementTree.fromstring(xml)
     flights = root.find("flights")
@@ -122,20 +125,40 @@ def parse_flights(xml):
     rows = []
     for flight in flights.findall("flight"):
         scheduled = parsed_time(flight.findtext("schedule_time"))
-        if scheduled is None:
+        number = (flight.findtext("flightId") or flight.findtext("flight_id") or "").strip().upper()
+        direction = flight.findtext("arr_dep")
+        if scheduled is None or not FLIGHT_NUMBER.fullmatch(number) or direction not in {"A", "D"}:
             continue
         status = flight.find("status")
         status_code = status.get("code") if status is not None else None
         status_time = parsed_time(status.get("time")) if status is not None else None
         rows.append({
-            "number": (flight.findtext("flightId") or flight.findtext("flight_id") or "").strip().upper(),
+            "number": number,
             "scheduled_at": scheduled.isoformat(),
             "status_code": status_code,
             "estimated_at": status_time.isoformat() if status_time and status_code in {"A", "D", "E"} else None,
-            "direction": flight.findtext("arr_dep"),
+            "direction": direction,
             "other_airport": flight.findtext("airport"),
+            "delayed": (flight.findtext("delayed") or "").strip().upper() == "Y" or (
+                status_code == "E" and status_time is not None and status_time > scheduled
+            ),
+            "codeshares": flight_codeshares(flight),
         })
     return rows
+
+
+def flight_codeshares(flight):
+    # The live feed uses semicolon-separated fields, including empty suffix slots.
+    fields = {child.tag.lower(): child.text or "" for child in flight}
+    airlines = fields.get("codeshareairlinedesignators", "").upper().split(";")
+    numbers = fields.get("codeshareflightnumbers", "").upper().split(";")
+    suffixes = fields.get("codeshareoperationalsuffixs", "").upper().split(";")
+    return sorted({
+        match
+        for index, (airline, number) in enumerate(zip(airlines, numbers))
+        if (match := airline.strip() + number.strip() + (suffixes[index].strip() if index < len(suffixes) else ""))
+        and FLIGHT_NUMBER.fullmatch(match)
+    })
 
 
 class PublicTravel:
@@ -143,7 +166,8 @@ class PublicTravel:
         self.client_factory = client_factory
         self.weather_cache = OrderedDict()
         self.weather_lock = asyncio.Lock()
-        self.flights = {}
+        self.flight_snapshot = None
+        self.flight_retry_at = None
         self.flight_lock = asyncio.Lock()
 
     async def transit(self, pickup, dropoff):
@@ -188,19 +212,32 @@ class PublicTravel:
     async def flight(self, number, direction, day):
         async with self.flight_lock:
             now = datetime.now(timezone.utc)
-            cached = self.flights.get(direction)
-            if cached is None or now >= cached[0]:
+            if self.flight_snapshot is None or now >= self.flight_snapshot[0] + AVINOR_REFRESH:
+                if self.flight_retry_at is not None and now < self.flight_retry_at:
+                    raise ValueError("Avinor refresh pending")
+                self.flight_retry_at = now + AVINOR_REFRESH
                 async with self.client_factory(timeout=TIMEOUT) as client:
-                    response = await client.get(AVINOR_URL, headers={"User-Agent": CLIENT_NAME},
-                                                params={"airport": "OSL", "TimeFrom": 18, "TimeTo": 36, "direction": direction})
+                    response = await client.get(
+                        AVINOR_URL,
+                        headers={"User-Agent": CLIENT_NAME},
+                        params={"airport": "OSL", "TimeFrom": 26, "TimeTo": 49, "codeshare": "Y"},
+                    )
                     response.raise_for_status()
-                cached = (now + timedelta(minutes=3), parse_flights(response.content))
-                self.flights[direction] = cached
-        matches = [flight for flight in cached[1] if flight["number"] == number and flight["direction"] == direction
-                   and parsed_time(flight["scheduled_at"]).astimezone(OSLO).date().isoformat() == day]
-        if not matches:
-            return None
-        return min(matches, key=lambda flight: abs((parsed_time(flight["scheduled_at"]) - now).total_seconds()))
+                self.flight_snapshot = (datetime.now(timezone.utc), parse_flights(response.content))
+            fetched_at, rows = self.flight_snapshot
+        matches = [
+            row for row in rows
+            if row["direction"] == direction
+            and (row["number"] == number or number in row["codeshares"])
+            and parsed_time(row["scheduled_at"]).astimezone(OSLO).date().isoformat() == day
+        ]
+        match = min(
+            matches,
+            key=lambda row: (row["number"] != number, abs((parsed_time(row["scheduled_at"]) - now).total_seconds())),
+            default=None,
+        )
+        result = {**match, "requested_number": number} if match is not None else None
+        return {"source": "Avinor", "airport": "OSL", "as_of": fetched_at.isoformat(), "flight": result}
 
 
 def install_travel_context(api, require_customer, rate_limit):
@@ -232,7 +269,6 @@ def install_travel_context(api, require_customer, rate_limit):
         if day not in {today.isoformat(), (today + timedelta(days=1)).isoformat()}:
             raise HTTPException(422, "Velg i dag eller i morgen for flystatus.")
         try:
-            result = await travel.flight(number, direction, day)
+            return await travel.flight(number, direction, day)
         except (httpx.HTTPError, ValueError, ElementTree.ParseError) as exc:
             raise HTTPException(503, "Kunne ikke hente flystatus fra Avinor akkurat nå.") from exc
-        return {"source": "Avinor", "airport": "OSL", "flight": result}

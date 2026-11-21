@@ -6,6 +6,5 @@ export default function CustomerSupportChat() {
   const params = useLocalSearchParams<{ topic?: string; tripId?: string }>();
   const topic = typeof params.topic === 'string' ? params.topic.slice(0, 200) : '';
   const tripId = typeof params.tripId === 'string' ? params.tripId.slice(0, 100) : '';
-  const initialMessage = [topic, tripId ? `Turreferanse: ${tripId}` : ''].filter(Boolean).join('\n');
-  return <CustomerSupport initialMessage={initialMessage} onBack={() => router.back()} />;
+  return <CustomerSupport initialMessage={topic} tripId={tripId || undefined} onBack={() => router.back()} />;
 }
