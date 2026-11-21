@@ -1,0 +1,38 @@
+appId: no.kjapp.driver
+name: Invited driver can reach ID review before approval
+tags:
+  - qa
+  - identity
+---
+# Use an invited, pending QA account with submitted documents and accepted terms.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: driver-onboarding-login
+    timeout: 60000
+- tapOn:
+    id: driver-onboarding-login
+- tapOn:
+    id: driver-login-identifier
+- inputText: ${MAESTRO_DRIVER_IDENTIFIER}
+- tapOn:
+    id: driver-login-password
+- inputText: ${MAESTRO_DRIVER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: driver-login-submit
+- extendedWaitUntil:
+    visible:
+      id: driver-approval-identity
+    timeout: 60000
+- assertNotVisible:
+    id: driver-approval-continue
+- tapOn:
+    id: driver-approval-identity
+- extendedWaitUntil:
+    visible:
+      id: driver-identity-screen
+    timeout: 30000
+- assertNotVisible:
+    id: driver-identity-continue

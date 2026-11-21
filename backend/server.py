@@ -34,7 +34,7 @@ from ride_reservations import RideReservations
 from ride_search import RideSearch
 from driver_media import install_driver_media, media_versions
 from driver_document_identity import (
-    PROOF, confirm_live_proof, identity_config, install_document_identity, proof_summary, reviewable_session,
+    PROOF, confirm_live_proof, identity_config, install_document_identity, profile_binding_current, profile_match_enabled, proof_summary, reviewable_session,
 )
 from live_cars import LiveCarsStream, RADIUS_KM, GPS_FRESH_SECONDS, position_bounds, fresh_sample_time
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
@@ -551,6 +551,25 @@ def user_public(user: dict) -> dict:
         or (KJAPP_DRIVER_IDENTITY_REQUIRED and identity_status != "verified")
     ))
     return result
+
+
+async def _invited_driver_can_onboard(user: dict) -> bool:
+    if (user.get("role") != "driver" or user.get("approved") is not False
+            or not user.get("id") or user.get("disabled") or user.get("fleet_active") is False):
+        return False
+    if await _fleet_is_suspended(user.get("fleet_id")):
+        return False
+    invitation = await db.driver_invites.find_one({
+        "used_by": user["id"], "used": True, "fleet_id": user["fleet_id"],
+    }, {"_id": 1})
+    return invitation is not None
+
+
+async def driver_session_view(user: dict) -> dict:
+    public = user_public(user)
+    if public["role"] == "driver" and public.get("approved") is False:
+        public["driver_onboarding_allowed"] = await _invited_driver_can_onboard(public)
+    return public
 
 
 def _session_is_current(payload: dict, user: dict) -> bool:
@@ -2567,7 +2586,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     account_email = str(user.get("email") or "").strip().lower()
     token = create_access_token(uid, account_email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": user_public(user)}
+    return {"token": token, "user": await driver_session_view(user)}
 
 
 @api.post("/auth/logout")
@@ -2704,7 +2723,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": user_public(user)}
+    return {"token": token, "user": await driver_session_view(user)}
 
 
 # ---- Password reset via e-postlenke ----
@@ -2843,7 +2862,7 @@ async def change_password(body: ChangePasswordRequest, request: Request, respons
     token = create_access_token(current["id"], user.get("email") or "")
     set_auth_cookie(response, token)
     fresh = await db.users.find_one({"_id": user["_id"]})
-    return {"token": token, "user": user_public(fresh)}
+    return {"token": token, "user": await driver_session_view(fresh)}
 
 
 @api.get("/auth/legal-config")
@@ -2874,7 +2893,7 @@ async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_use
     updated = await db.users.find_one({"_id": oid})
     if not updated:
         raise HTTPException(status_code=404, detail="Bruker ikke funnet")
-    return user_public(updated)
+    return await driver_session_view(updated)
 
 
 @api.get("/auth/me")
@@ -2895,7 +2914,7 @@ async def me(current=Depends(get_current_user)):
             current["car"] = vehicle.get("car")
             current["plate"] = vehicle.get("plate")
             current["vehicle_type"] = vehicle.get("vehicle_type") or "ai-first"
-    public = user_public(current)
+    public = await driver_session_view(current)
     if current.get("role", "user") in ("user", "customer"):
         photo = await db.customer_photos.find_one({"_id": current["id"]}, {"version": 1})
         public["customer_photo_version"] = (photo or {}).get("version")
@@ -4458,7 +4477,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh},
          "last_lat": {"$gte": -90, "$lte": 90}, "last_lng": {"$gte": -180, "$lte": 180}},
         {"last_lat": 1, "last_lng": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1,
-         "car": 1, "plate": 1, "vehicle_access_mode": 1, "allowed_vehicle_ids": 1, "profile_photo_path": 1},
+         "car": 1, "plate": 1, "vehicle_access_mode": 1, "allowed_vehicle_ids": 1, "profile_photo_path": 1, "drivers_license_path": 1, PROOF: 1},
     ):
         did = str(d["_id"])
         if did in busy or await _fleet_is_suspended(d.get("fleet_id")):
@@ -6945,6 +6964,16 @@ async def _driver_shift_compliance(driver: dict, assigned_vehicle: Optional[dict
         "profile_photo_ok": profile_photo_ok,
         "vehicle_id": str(vehicle["_id"]) if vehicle else None,
     }
+    binding_source = driver
+    if driver_id and driver.get("id") and PROOF not in driver and ObjectId.is_valid(driver_id):
+        binding_source = await db.users.find_one(
+            {"_id": ObjectId(driver_id), f"{PROOF}.reviewed_by": "stripe_identity_profile_match"},
+            {PROOF: 1, "profile_photo_path": 1, "drivers_license_path": 1},
+        ) or {}
+    if not profile_binding_current(binding_source):
+        result["operational"] = False
+        result["message"] = "Profilbilde eller førerkort er endret. Kontakt SNAR for ny ID-kontroll."
+        return result
     internal, test_ready = await _internal_driver_context(driver, vehicle)
     if internal and test_ready:
         # This is permission for an isolated physical test, never document verification.
@@ -7967,6 +7996,8 @@ class ApproveDriverRequest(BaseModel):
 
 def _enforce_identity_before_driver_approval(driver: dict, approving: bool) -> None:
     """When rollout enforcement is enabled, Admin cannot approve an unverified driver."""
+    if approving and not profile_binding_current(driver):
+        raise HTTPException(409, "Sjåførens profilbilde eller førerkort er endret. Ny ID-kontroll kreves.")
     if approving and KJAPP_DRIVER_IDENTITY_REQUIRED and driver.get("identity_verification_status") != "verified":
         raise HTTPException(
             status_code=409,
@@ -9643,6 +9674,12 @@ async def _require_driver_identity_user(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("disabled"):
         raise HTTPException(status_code=403, detail="Sjåførkontoen er deaktivert")
+    if current.get("fleet_active") is False:
+        raise HTTPException(status_code=403, detail="Sjåføren er deaktivert i flåten")
+    if current.get("approved") is True:
+        await _require_active_fleet(current.get("fleet_id"))
+    elif not await _invited_driver_can_onboard(current):
+        raise HTTPException(status_code=403, detail="Bekreftet flåteinvitasjon kreves for ID-kontroll")
     return current
 
 
@@ -9668,6 +9705,7 @@ async def driver_identity_verification_status(current=Depends(_require_driver_id
         "identity_verified_at": current.get("identity_verified_at"),
         "recheck_deferred_until_trip_end": bool(current.get("identity_recheck_pending_reason")),
         "document_available": document_config is not None,
+        "profile_match_available": document_config is not None and profile_match_enabled(APP_ENV),
         "document_mode": ("live" if document_config.live else "test") if document_config else None,
         "document_identity": proof_summary((document or {}).get(PROOF)),
     }
@@ -12203,7 +12241,7 @@ install_student_verification(api, db, require_customer=require_customer, require
     rate_limit=_enforce_rate_limit, audit=_audit)
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 install_travel_context(api, require_customer, _enforce_rate_limit)
-install_document_identity(api, db, _require_driver_identity_user, _enforce_rate_limit, APP_ENV)
+install_document_identity(api, db, _require_driver_identity_user, _enforce_rate_limit, APP_ENV, _schedule_identity_recheck_at, get_stored_document)
 install_business_payment(api, db, stripe, require_customer, _enforce_rate_limit)
 install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     create_access_token=create_access_token, create_twofa_token=create_twofa_token,

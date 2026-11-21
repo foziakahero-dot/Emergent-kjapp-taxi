@@ -272,7 +272,8 @@ def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():
     driver_auth = (ROOT / "driver-app" / "src" / "context" / "AuthContext.tsx").read_text(encoding="utf-8")
     assert "u?.role !== 'user'" in customer_auth
     assert "client: 'customer'" in customer_auth
-    assert "u?.role !== 'driver' || u?.approved !== true" in driver_auth
+    assert "if (!canKeepDriverSession(u))" in driver_auth
+    assert "!canKeepDriverSession(res.user)" in driver_auth
 
 
 def test_driver_can_select_only_explicit_fleet_assignments():

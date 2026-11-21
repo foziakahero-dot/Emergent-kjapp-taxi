@@ -1,3 +1,4 @@
+import { canKeepDriverSession } from '@/src/lib/driverAccess';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
@@ -19,6 +20,7 @@ export type User = {
   vehicle_type?: string;
   profile_photo_path?: string;
   approved?: boolean;
+  driver_onboarding_allowed?: boolean;
   legal_accepted?: boolean;
   identity_verification_status?: string;
   identity_recheck_required?: boolean;
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const u = await withBackendWakeRetry(() => authApi.me());
       if (epoch !== sessionEpoch.current) return;
-      if (u?.role !== 'driver' || u?.approved !== true) {
+      if (!canKeepDriverSession(u)) {
         await storage.removeItem(TOKEN_KEY);
         setUser(null);
         return;
@@ -129,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const persistSession = async (res: any, epoch: number): Promise<User> => {
     if (epoch !== sessionEpoch.current) return null;
-    if (!res?.token || res.user?.role !== 'driver' || res.user?.approved !== true) {
+    if (!res?.token || !canKeepDriverSession(res.user)) {
       throw new Error('Sjåførkontoen må være invitert og godkjent.');
     }
     await storage.setItem(TOKEN_KEY, res.token);
