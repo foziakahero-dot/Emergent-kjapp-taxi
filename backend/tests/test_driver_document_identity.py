@@ -22,20 +22,21 @@ WEBHOOK = "/webhooks/stripe/driver-identity"
 
 
 @pytest.fixture
-def identity_flow(monkeypatch):
+def identity_flow(monkeypatch, request):
+    live = getattr(request, "param", False)
     raw = mongomock.MongoClient().db.users
-    driver_id = raw.insert_one({"role": "driver", "approved": False}).inserted_id
+    driver_id = raw.insert_one({"role": "driver", "approved": False, "profile_photo_path": "profile-fixture", "drivers_license_path": "licence-fixture"}).inserted_id
     users = AsyncMock(wraps=raw)
-    config = IdentityConfig("rk_test_fixture", "whsec_fixture", False, "https://api-qa.snarapp.no/")
+    config = IdentityConfig("rk_test_fixture", "whsec_fixture", live, "https://api-qa.snarapp.no/")
     snapshot = {
-        "id": "vs_fixture", "object": "identity.verification_session", "type": "document", "livemode": False,
+        "id": "vs_fixture", "object": "identity.verification_session", "type": "document", "livemode": live,
         "options": {"document": {"require_matching_selfie": True}}, "status": "requires_input",
         "url": "https://verify.stripe.com/start/fixture", "client_secret": "not-for-the-app",
     }
 
     def create(params, _options):
         snapshot["client_reference_id"] = params["client_reference_id"]
-        assert params["options"]["document"]["require_matching_selfie"] is True
+        assert params["options"]["document"] == {"require_matching_selfie": True, "allowed_types": ["driving_license"]}
         assert "metadata" not in params
         return snapshot.copy()
 
@@ -49,7 +50,10 @@ def identity_flow(monkeypatch):
     def current_driver():
         return {"id": str(driver_id)}
 
-    install_document_identity(app, SimpleNamespace(users=users), current_driver, AsyncMock(), "qa")
+    if live:
+        monkeypatch.setattr("driver_document_identity.identity_config", lambda _: config)
+    install_document_identity(app, SimpleNamespace(users=users), current_driver, AsyncMock(),
+                              "production" if live else "qa", lambda: "2030-01-01T00:00:00+00:00", AsyncMock())
     return TestClient(app), raw, driver_id, sessions, snapshot, config
 
 
@@ -136,3 +140,42 @@ def test_review_needs_the_live_proof_and_preserves_driver_approval_and_recheck()
     assert driver["identity_verification_status"] == "verified"
     assert driver[PROOF]["reviewed_by"] == "reviewer"
     assert confirm() is None
+
+@pytest.mark.parametrize("identity_flow", [True, False], indirect=True)
+@pytest.mark.parametrize("enabled,matched,changed", [(False,True,False), (True,True,False), (True,False,False), (True,True,True)])
+def test_automatic_identity_confirmation_requires_explicit_activation(identity_flow, enabled, matched, changed, monkeypatch):
+    client, users, driver_id, sessions, snapshot, config = identity_flow
+    prefix = "SNAR" if config.live else "QA"
+    monkeypatch.setenv(f"{prefix}_DRIVER_PROFILE_MATCH_ENABLED", str(enabled).lower())
+    match = AsyncMock(return_value=matched)
+    monkeypatch.setattr("driver_document_identity.compare_driver_files", match)
+    monkeypatch.setattr(IdentityConfig, "stripe_client", lambda self: Mock())
+    assert client.post(START, json={"profile_match_consent": True}).status_code == 200
+    if changed:
+        users.update_one({"_id": driver_id}, {"$set":{"profile_photo_path":"replacement"}})
+    snapshot["status"] = "verified"
+    event = {"id": "evt_fixture", "object": "event", "livemode": config.live,
+             "type": "identity.verification_session.verified", "data": {"object": snapshot}}
+    body = json.dumps(event).encode()
+    stamp = int(time.time())
+    signature = hmac.new(config.webhook_secret.encode(), f"{stamp}.".encode() + body, hashlib.sha256).hexdigest()
+    def deliver():
+        return client.post(WEBHOOK, content=body, headers={"Stripe-Signature": f"t={stamp},v1={signature}"})
+    assert deliver().status_code == 200
+    driver = users.find_one({"_id": driver_id})
+    assert driver[PROOF]["status"] == "verified"
+    assert (driver.get("identity_verification_status") == "verified") == (config.live and enabled and matched and not changed)
+    assert driver["approved"] is False
+    assert deliver().status_code == 200
+    assert users.find_one({"_id": driver_id}) == driver
+    assert match.await_count == int(enabled and not changed)
+    if enabled and changed:
+        assert driver[PROOF]["profile_match"] == "manual_review"
+
+def test_a_changed_image_invalidates_the_automatic_identity_binding():
+    from driver_document_identity import profile_binding_current
+    inputs = {"profile_photo_path":"registered-picture", "drivers_license_path":"registered-licence"}
+    driver = {**inputs, PROOF: {"reviewed_by":"stripe_identity_profile_match", "comparison_inputs":inputs}}
+    assert profile_binding_current(driver)
+    for field in inputs:
+        assert not profile_binding_current({**driver,field:"replacement"})

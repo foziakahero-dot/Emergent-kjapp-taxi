@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Image, Linking, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, useColorTheme } from '@/src/theme';
 import Svg, { Ellipse } from 'react-native-svg';
@@ -15,6 +15,7 @@ import { apiError, driverApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
 type DocumentProof = {
+  profile_match?: 'matched' | 'manual_review' | null;
   status: 'creating' | 'requires_input' | 'processing' | 'verified' | 'canceled';
   mode: 'test' | 'live';
 };
@@ -30,6 +31,7 @@ type Verification = {
   identity_verified_at?: string | null;
   recheck_deferred_until_trip_end?: boolean;
   document_available?: boolean;
+  profile_match_available?: boolean;
   document_mode?: 'test' | 'live' | null;
   document_identity?: DocumentProof | null;
 };
@@ -152,7 +154,7 @@ export default function DriverIdentity() {
     setBusy(true);
     setErr('');
     try {
-      const result = await driverApi.startDocumentIdentity();
+      const result = await driverApi.startDocumentIdentity(verification?.profile_match_available === true);
       if (!result?.proof?.status) throw new Error('Stripe bekreftet ikke kontrollen.');
       if (!alive.current) return;
       setVerification(current => current ? { ...current, document_identity: result.proof } : current);
@@ -174,6 +176,23 @@ export default function DriverIdentity() {
   const status = verification?.status === 'verified' && user?.identity_recheck_required ? 'recheck_required' : verification?.status || 'not_submitted';
   const meta = STATUS[status] || { title: 'Ukjent kontrollstatus', body: 'Oppdater kontrollstatus før du fortsetter.', tone: 'neutral' as const };
   const documentProof = verification?.document_identity;
+  const waitingForDocument = documentProof?.status === 'processing' || documentProof?.status === 'requires_input' || (documentProof?.status === 'verified' && verification?.profile_match_available === true && !documentProof.profile_match);
+  useFocusEffect(useCallback(() => {
+    if (!waitingForDocument) return;
+    let disposed = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (disposed) return;
+      if (AppState.currentState === 'active') {
+        attempts++;
+        await load();
+      }
+      if (!disposed && attempts < 24) timer = setTimeout(poll, 5000);
+    };
+    timer = setTimeout(poll, 5000);
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [waitingForDocument, load]));
   const testDocument = (documentProof?.mode || verification?.document_mode) === 'test';
   const initialDocumentChoice = status === 'not_submitted' && (verification?.document_available || documentProof);
   const canOpenDocument = verification?.document_available && documentProof?.status !== 'verified' && documentProof?.status !== 'processing';
@@ -192,14 +211,16 @@ export default function DriverIdentity() {
       <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="camera" size={26} /></View><Text style={[v10.title, { marginTop: 18 }]}>Bekreft at det er deg</Text>
       {verification.document_available || documentProof ? <V10Group style={{ marginTop: 16, padding: 12, gap: 8 }}>
         <Text style={v10.body}>{testDocument ? 'Dokumentkontroll med Stripe · Testmodus' : 'Dokumentkontroll med Stripe'}</Text>
-        <Text style={v10.secondary}>{documentProof?.status === 'verified'
+        <Text accessibilityLiveRegion="polite" style={v10.secondary}>{documentProof?.status === 'verified'
           ? (documentProof.mode === 'test' ? 'Testkontrollen er fullført.' : 'Stripe har bekreftet dokumentkontrollen. Søknaden behandles av SNAR.')
           : documentProof?.status === 'processing'
             ? 'Stripe behandler dokumentene.'
             : testDocument
               ? 'Bruk Stripes testvalg for å simulere en dokumentkontroll.'
               : 'Vis legitimasjon og bekreft at den tilhører deg på Stripes sikre side.'}</Text>
-        {canOpenDocument ? <V10Action label={documentProof?.status === 'requires_input' ? 'Fortsett hos Stripe' : 'Start ID-kontroll'} onPress={() => void openDocumentCheck()} busy={busy} testID="driver-document-id-start" /> : null}
+        {verification.profile_match_available && canOpenDocument ? <Text style={v10.secondary}>Ved å velge «Samtykk og fortsett» lar du SNAR sammenligne selfien fra Stripe med ditt registrerte profilbilde og bildet på førerkortet gjennom Amazon Rekognition i Irland. Du kan velge manuell kontroll under.</Text> : null}
+        {documentProof?.profile_match ? <Text accessibilityLiveRegion="polite" style={v10.secondary}>{documentProof.profile_match === 'matched' ? (testDocument ? 'Bildesamsvar bekreftet i testmodus.' : 'Profilbilde og førerkort samsvarer med den verifiserte selfien.') : 'Bildene trenger manuell vurdering hos SNAR.'}</Text> : null}
+        {canOpenDocument ? <V10Action label={verification.profile_match_available ? 'Samtykk og fortsett' : documentProof?.status === 'requires_input' ? 'Fortsett hos Stripe' : 'Start ID-kontroll'} onPress={() => void openDocumentCheck()} busy={busy} testID="driver-document-id-start" /> : null}
         {documentProof && documentProof.status !== 'verified' ? <V10Action kind="soft" label="Sjekk ID-status" disabled={busy} onPress={() => void load()} testID="driver-document-id-status" /> : null}
       </V10Group> : null}
       {!initialDocumentChoice && <View style={{ marginTop: 16, gap: 6 }}><V10Badge tone={meta.tone === 'good' ? 'positive' : meta.tone === 'warn' ? 'warning' : 'neutral'}>{meta.title}</V10Badge><Text style={v10.secondary}>{meta.body}</Text>

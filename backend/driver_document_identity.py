@@ -9,6 +9,8 @@ from uuid import uuid4
 
 import stripe
 from bson import ObjectId
+from driver_profile_match import PHOTO_FIELDS, compare_driver_files
+from pydantic import BaseModel, StrictBool
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pymongo import ReturnDocument
@@ -33,12 +35,15 @@ class IdentityConfig:
     live: bool
     return_url: str
 
-    def client(self):
+    def stripe_client(self):
         return stripe.StripeClient(
             self.key,
             max_network_retries=1,
             http_client=stripe.RequestsClient(timeout=8),
-        ).v1.identity.verification_sessions
+        )
+
+    def client(self):
+        return self.stripe_client().v1.identity.verification_sessions
 
 
 def identity_config(environment):
@@ -60,6 +65,7 @@ def proof_summary(proof):
         return None
     return {
         "provider": "stripe_identity",
+        "profile_match": proof.get("profile_match"),
         "mode": "live" if proof.get("livemode") is True else "test",
         "status": proof["status"],
         "updated_at": proof.get("updated_at"),
@@ -89,11 +95,12 @@ def reviewable_session(driver):
     return None
 
 
-async def confirm_live_proof(users, user_id, session_id, admin_id, next_check_at):
+async def confirm_live_proof(users, user_id, session_id, admin_id, next_check_at, *, evidence=None):
     reviewed_at = datetime.now(timezone.utc).isoformat()
     return await users.find_one_and_update(
         {
             **first_check_driver(user_id),
+            **(evidence or {}),
             f"{PROOF}.session_id": session_id,
             f"{PROOF}.livemode": True,
             f"{PROOF}.status": "verified",
@@ -162,9 +169,26 @@ def _hosted_url(url):
     return None
 
 
-async def _reserve_attempt(users, owner, config):
+class DocumentStart(BaseModel):
+    profile_match_consent: StrictBool = False
+
+
+def profile_match_enabled(environment):
+    prefix = {"qa": "QA", "production": "SNAR"}.get(environment)
+    return bool(prefix and os.getenv(f"{prefix}_DRIVER_PROFILE_MATCH_ENABLED") == "true")
+
+
+async def _reserve_attempt(users, owner, config, consent=False):
     proof = {"attempt": uuid4().hex, "status": "creating", "livemode": config.live}
     driver = first_check_driver(owner)
+    if consent:
+        registered = await users.find_one(driver, {field: 1 for field in PHOTO_FIELDS}) or {}
+        if not all(registered.get(field) for field in PHOTO_FIELDS):
+            raise HTTPException(409, "Profilbilde og førerkort må være registrert først.")
+        proof["comparison_inputs"] = {field: registered[field] for field in PHOTO_FIELDS}
+        proof["consent_version"] = "profile-license-v1"
+        proof["consented_at"] = datetime.now(timezone.utc).isoformat()
+        driver.update(proof["comparison_inputs"])
     # One local slot per new driver. Stripe reuses the same idempotency key after network or DB failures.
     row = await users.find_one_and_update(
         {
@@ -182,10 +206,20 @@ async def _reserve_attempt(users, owner, config):
     proof = row.get(PROOF) or {}
     if proof.get("livemode") is not config.live or not proof.get("attempt"):
         raise HTTPException(409, "En annen ID-kontroll er registrert for kontoen.")
+    if consent and proof.get("comparison_inputs") != {field: registered[field] for field in PHOTO_FIELDS}:
+        raise HTTPException(409, "En tidligere ID-kontroll må fullføres eller behandles manuelt.")
     return proof
 
 
-def install_document_identity(api, db, require_driver, rate_limit, environment):
+def profile_binding_current(driver):
+    proof = driver.get(PROOF) or {}
+    if proof.get("reviewed_by") != "stripe_identity_profile_match":
+        return True
+    inputs = proof.get("comparison_inputs") or {}
+    return all(inputs.get(field) and inputs[field] == driver.get(field) for field in PHOTO_FIELDS)
+
+
+def install_document_identity(api, db, require_driver, rate_limit, environment, schedule_recheck=None, read_file=None):
     def configured():
         config = identity_config(environment)
         if config is None:
@@ -193,10 +227,11 @@ def install_document_identity(api, db, require_driver, rate_limit, environment):
         return config
 
     @api.post("/driver/identity-verification/document/start")
-    async def start(request: Request, response: Response, current=Depends(require_driver)):
+    async def start(request: Request, response: Response, body: DocumentStart | None = None, current=Depends(require_driver)):
         await rate_limit(request, "driver-document-id-start", 8, 3600)
         config = configured()
-        proof = await _reserve_attempt(db.users, current["id"], config)
+        proof = await _reserve_attempt(db.users, current["id"], config,
+                                       bool(body and body.profile_match_consent and profile_match_enabled(environment)))
         response.headers["Cache-Control"] = "no-store"
         if proof["status"] == "verified":
             return {"proof": proof_summary(proof), "verification_url": None}
@@ -209,7 +244,7 @@ def install_document_identity(api, db, require_driver, rate_limit, environment):
                     "type": "document",
                     "client_reference_id": proof["attempt"],
                     "return_url": config.return_url,
-                    "options": {"document": {"require_matching_selfie": True}},
+                    "options": {"document": {"allowed_types": ["driving_license"], "require_matching_selfie": True}},
                 }, {"idempotency_key": f"snar-driver-id-{proof['attempt']}"})
         except stripe.StripeError:
             raise HTTPException(502, "Kunne ikke åpne ID-kontrollen hos Stripe. Prøv igjen.") from None
@@ -254,12 +289,34 @@ def install_document_identity(api, db, require_driver, rate_limit, environment):
         if not driver or driver.get("approved") is True or driver.get("disabled") is True:
             return {"received": True}
         proof = driver[PROOF]
-        if proof["status"] in {"verified", "canceled"}:
+        inputs = proof.get("comparison_inputs") or {}
+        should_compare = (profile_match_enabled(environment) and read_file is not None
+                          and proof.get("consent_version") == "profile-license-v1" and set(inputs) == set(PHOTO_FIELDS))
+        if proof["status"] == "canceled" or (proof["status"] == "verified" and not should_compare):
             return {"received": True}
         # A queued event can arrive out of order. The session API gives the current result.
         try:
             latest = await asyncio.to_thread(config.client().retrieve, session_id)
         except stripe.StripeError:
             raise HTTPException(502, "Kunne ikke hente ID-resultatet hos Stripe.") from None
-        await _save_result(db.users, str(driver["_id"]), proof, latest, config)
+        saved = await _save_result(db.users, str(driver["_id"]), proof, latest, config)
+        if should_compare and latest.get("status") == "verified" and saved["status"] == "verified":
+            owner = str(driver["_id"])
+            binding = {**first_check_driver(owner), **inputs, f"{PROOF}.attempt": attempt,
+                       f"{PROOF}.session_id": session_id}
+            bound = await db.users.find_one(binding)
+            if not bound:
+                await db.users.update_one({**first_check_driver(owner), f"{PROOF}.attempt": attempt,
+                                           f"{PROOF}.profile_match": None},
+                                          {"$set": {f"{PROOF}.profile_match": "manual_review"}})
+            if bound:
+                decision = bound[PROOF].get("profile_match")
+                if decision is None:
+                    matched = await compare_driver_files(db, bound, read_file, config.stripe_client(), latest)
+                    decision = "matched" if matched else "manual_review"
+                    await db.users.update_one({**binding, f"{PROOF}.profile_match": None},
+                                              {"$set": {f"{PROOF}.profile_match": decision}})
+                if config.live and decision == "matched" and schedule_recheck:
+                    await confirm_live_proof(db.users, owner, session_id, "stripe_identity_profile_match",
+                                             schedule_recheck(), evidence={**inputs, f"{PROOF}.profile_match": "matched"})
         return {"received": True}

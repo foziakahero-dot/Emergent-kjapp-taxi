@@ -34,7 +34,7 @@ from ride_reservations import RideReservations
 from ride_search import RideSearch
 from driver_media import install_driver_media, media_versions
 from driver_document_identity import (
-    PROOF, confirm_live_proof, identity_config, install_document_identity, proof_summary, reviewable_session,
+    PROOF, confirm_live_proof, identity_config, install_document_identity, profile_binding_current, profile_match_enabled, proof_summary, reviewable_session,
 )
 from live_cars import LiveCarsStream, RADIUS_KM, GPS_FRESH_SECONDS, position_bounds, fresh_sample_time
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
@@ -4458,7 +4458,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh},
          "last_lat": {"$gte": -90, "$lte": 90}, "last_lng": {"$gte": -180, "$lte": 180}},
         {"last_lat": 1, "last_lng": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1,
-         "car": 1, "plate": 1, "vehicle_access_mode": 1, "allowed_vehicle_ids": 1, "profile_photo_path": 1},
+         "car": 1, "plate": 1, "vehicle_access_mode": 1, "allowed_vehicle_ids": 1, "profile_photo_path": 1, "drivers_license_path": 1, PROOF: 1},
     ):
         did = str(d["_id"])
         if did in busy or await _fleet_is_suspended(d.get("fleet_id")):
@@ -6945,6 +6945,16 @@ async def _driver_shift_compliance(driver: dict, assigned_vehicle: Optional[dict
         "profile_photo_ok": profile_photo_ok,
         "vehicle_id": str(vehicle["_id"]) if vehicle else None,
     }
+    binding_source = driver
+    if driver_id and driver.get("id") and PROOF not in driver and ObjectId.is_valid(driver_id):
+        binding_source = await db.users.find_one(
+            {"_id": ObjectId(driver_id), f"{PROOF}.reviewed_by": "stripe_identity_profile_match"},
+            {PROOF: 1, "profile_photo_path": 1, "drivers_license_path": 1},
+        ) or {}
+    if not profile_binding_current(binding_source):
+        result["operational"] = False
+        result["message"] = "Profilbilde eller førerkort er endret. Kontakt SNAR for ny ID-kontroll."
+        return result
     internal, test_ready = await _internal_driver_context(driver, vehicle)
     if internal and test_ready:
         # This is permission for an isolated physical test, never document verification.
@@ -7967,6 +7977,8 @@ class ApproveDriverRequest(BaseModel):
 
 def _enforce_identity_before_driver_approval(driver: dict, approving: bool) -> None:
     """When rollout enforcement is enabled, Admin cannot approve an unverified driver."""
+    if approving and not profile_binding_current(driver):
+        raise HTTPException(409, "Sjåførens profilbilde eller førerkort er endret. Ny ID-kontroll kreves.")
     if approving and KJAPP_DRIVER_IDENTITY_REQUIRED and driver.get("identity_verification_status") != "verified":
         raise HTTPException(
             status_code=409,
@@ -9668,6 +9680,7 @@ async def driver_identity_verification_status(current=Depends(_require_driver_id
         "identity_verified_at": current.get("identity_verified_at"),
         "recheck_deferred_until_trip_end": bool(current.get("identity_recheck_pending_reason")),
         "document_available": document_config is not None,
+        "profile_match_available": document_config is not None and profile_match_enabled(APP_ENV),
         "document_mode": ("live" if document_config.live else "test") if document_config else None,
         "document_identity": proof_summary((document or {}).get(PROOF)),
     }
@@ -12203,7 +12216,7 @@ install_student_verification(api, db, require_customer=require_customer, require
     rate_limit=_enforce_rate_limit, audit=_audit)
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 install_travel_context(api, require_customer, _enforce_rate_limit)
-install_document_identity(api, db, _require_driver_identity_user, _enforce_rate_limit, APP_ENV)
+install_document_identity(api, db, _require_driver_identity_user, _enforce_rate_limit, APP_ENV, _schedule_identity_recheck_at, get_stored_document)
 install_business_payment(api, db, stripe, require_customer, _enforce_rate_limit)
 install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     create_access_token=create_access_token, create_twofa_token=create_twofa_token,
