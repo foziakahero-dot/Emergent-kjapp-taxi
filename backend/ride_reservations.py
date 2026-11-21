@@ -342,9 +342,14 @@ class RideReservations:
                 pi = await asyncio.to_thread(self.client().v1.payment_intents.cancel, stripe_id(pi), {},
                                             {"idempotency_key": f"snar-release-{trip['trip_id']}"})
             if value(pi, "status") == "canceled":
-                await self.db.trips.update_one({"trip_id": trip["trip_id"]}, {"$set": {"reservation_status": "released"}})
                 await self.db.payment_transactions.update_one({"trip_id": trip["trip_id"], "kind": "ride_reservation"},
                                                                {"$set": {"status": "canceled", "payment_status": "released"}})
+                await self.db.trips.update_one(
+                    {"trip_id": trip["trip_id"], "user_id": record["user_id"],
+                     "status": {"$in": ["cancelled", "cancelled_by_driver"]},
+                     "payment_status": {"$in": [None, "unpaid", "authorizing", "reserved", "not_due"]}},
+                    {"$set": {"reservation_status": "released", "payment_status": "not_due"}},
+                )
         except (self.stripe.StripeError, HTTPException):
             logging.warning("Reservation release needs retry: %s", trip["trip_id"])
 
@@ -378,6 +383,8 @@ class RideReservations:
                 query = {"payment_flow": "reservation", "$or": [
                     {"status": "arrived", "payment_status": {"$ne": "paid"}},
                     {"status": {"$in": ["cancelled", "cancelled_by_driver"]}, "reservation_status": {"$ne": "released"}},
+                    {"status": {"$in": ["cancelled", "cancelled_by_driver"]}, "reservation_status": "released",
+                     "payment_status": {"$in": ["authorizing", "reserved"]}},
                     {"status": "payment_authorizing"},
                     {"status": {"$in": ["completed", "rated"]}, "fleet_transfer_pending": True},
                 ]}
